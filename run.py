@@ -6,9 +6,11 @@ Created on Tue Sep 10 06:43:47 2024
 """
 
 from model import WealthModel
+from model import Histogram
 from mesa.visualization import SolaraViz,make_plot_measure
 
-model = WealthModel(2000)
+
+model = WealthModel(200, .02, tax=0.0, innovation=False)
 
 model_params = {
     "population": {
@@ -16,19 +18,34 @@ model_params = {
         "value": 50,
         "label": "Number of agents:",
         "min": 10,
-        "max": 100,
-        "step": 1,
-    }
+        "max": 200,
+        "step": 10,
+    },
+    "tax" : {
+    "type": "SliderFloat",
+    "value": 0.0, 
+    "min": 0.0,
+    "max":1.0,
+    "step":0.05},
+
+    "threshold": {
+        "type": "SliderFloat",
+        "value": 0.1,
+        "label": "Innovation Threshold:",
+        "min": 0,
+        "max": 1,
+        "step": 0.1},
+    
 }
 
-wealth_plot = make_plot_measure("Distro")
+wealth_plot = make_plot_measure("Gini")
+total_wealth = make_plot_measure("Total")
 
-dash = SolaraViz(
+Page = SolaraViz(
     model, 
-    components=[wealth_plot],
+    components=[wealth_plot,total_wealth,Histogram],
     model_params=model_params,
 )
-
 """
 for step in range(10):
     model.step()

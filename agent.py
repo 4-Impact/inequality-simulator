@@ -9,24 +9,61 @@ import mesa
 
 class WealthAgent(mesa.Agent):
     
-    def __init__(self,model, proportion):
+    def __init__(self,model, proportion,innovation):
         super().__init__(model)
-        self.wealth=38000
-        self.W =proportion
+        self.wealth=10
+        self.W = proportion
+        self.I = innovation
+        self.ioriginal = innovation
+        self.decay = 0
         
         
+    def exchange(self): 
+
+        return self.random.choice(self.model.agents)
+    
+    
     def step(self):
-        #increase welath by proportion - payday
-        self.wealth += (self.W*self.wealth)
-        #self.wealth -= 10000 #surival expense
         
-        if self.wealth > 0: 
-            #get basic expenses
-            exchange_agent = self.random.choice(self.model.agents)
+        """
+                                PAYDAY
+        """
+        count = 0
+        #increase wealth by proportion - payday
+        self.wealth += (self.W*self.wealth)
+        #self.wealth -= self.wealth*0.1 #basic survival
+                        
+        exchange_agent = self.exchange()
+        
+        if self.wealth > 0: #exchange_agent.W*self.wealth
             if exchange_agent is not None and exchange_agent is not self:
                 #print(self.wealth)
                 exchange_agent.wealth += (exchange_agent.W*self.wealth)
-                self.wealth -= (exchange_agent.W*self.wealth)
-                #print (exchange_agent.wealth, self.wealth) 
+                self.wealth -= (exchange_agent.W*self.wealth)                
+        '''
+        else: 
+            count += 1
+            if count < 5: 
+                self.step()
+            else: 
+                print(f"poor agent {self.wealth}")
+
+        '''
+        '''
+                            INNOVATION
+      
+         '''    
+        if self.model.innovation==True: 
+            if self.wealth > self.model.total*model.threshold and self.I > 1.0: 
+                #increase payday by innovation
+                self.W*=self.I
+                #Value of innovation decreases over time
+                self.I-=self.decay #starts at 0
+                #increase decay for next step 
+                self.decay+=0.01
+            else: 
+                self.decay = 0 
+                self.I = self.ioriginal
+        
                 
         
