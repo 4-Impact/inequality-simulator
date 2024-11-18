@@ -6,7 +6,7 @@ jupyterlab-widgets==1.0.0
 numpy==1.24.4
 notebook==6.5.7
 scipy==1.8.0
-solara==1.39.0
-solara-server==1.39.0
-solara-ui==1.39.0
+solara==1.41.0
+solara-server==1.41.0
+solara-ui==1.41.0
 pymdown-extensions
