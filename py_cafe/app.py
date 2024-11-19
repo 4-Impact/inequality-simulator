@@ -15,7 +15,7 @@ model_params = {
     "policy": {
         "type": "Select",
         "value": "innovation",
-        "values": ["econophysics", "fascist","communist", "innovation"],
+        "values": ["econophysics", "powerful leaders","equal wealth distribution", "innovation"],
         "text": "Select Policy"
     }
 }

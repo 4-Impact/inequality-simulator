@@ -34,11 +34,11 @@ def Churn(model):
     ax = fig.subplots()
     ax.axis('off')
     churn_details = calculate_churn(model)
-    ax.text(0.2, 0.8, f"Upper Class: {round((churn_details[2]["Upper"]/200)*100,0)}% ", va='center', ha='left', color="green", fontsize=15)
-    ax.text(0.2,0.5,f"Middle Class {round((churn_details[2]["Middle"]/200)*100,0)}% ",  va='center', ha='left', color="orange", fontsize=15)
-    ax.text(0.2, 0.2, f"Lower Class {round((churn_details[2]["Lower"]/200)*100,0)}% ", va='center', ha='left', color="red", fontsize=15)
-    ax.text(0.6, 0.6, f"Moving Up {round((churn_details[0]/200)*100,2)}%", va='center', ha='left', color="black", fontsize=15)
-    ax.text(0.6, 0.4, f"Moving Down {round((churn_details[1]/200)*100,2)}%", va='center', ha='left', color="black", fontsize=15)
+    ax.text(0.2, 0.8, f"Upper Class: {round((churn_details[2]['Upper']/200)*100,0)}% ", va='center', ha='left', color="green", fontsize=15)
+    ax.text(0.2,0.5,f"Middle Class {round((churn_details[2]['Middle']/200)*100,0)}% ",  va='center', ha='left', color="orange", fontsize=15)
+    ax.text(0.2, 0.2, f"Lower Class {round((churn_details[2]['Lower']/200)*100,0)}% ", va='center', ha='left', color="red", fontsize=15)
+    ax.text(0.6, 0.7, f"Moving Up {round((churn_details[0]/200)*100,2)}%", va='center', ha='left', color="black", fontsize=15)
+    ax.text(0.6, 0.3, f"Moving Down {round((churn_details[1]/200)*100,2)}%", va='center', ha='left', color="black", fontsize=15)
     
     solara.FigureMatplotlib(fig)
 
@@ -57,11 +57,9 @@ def Wealth(model):
     ax.axis('off')
     total_wealth = sum([agent.wealth for agent in model.agents])
     words = number_to_words(int(total_wealth))
-    ax.text(0.0,0.8,f"Total Wealth Using {model.policy} Policy", 
+    ax.text(0.0,0.8,f"Total Wealth Using: \n{model.policy} policy", 
              va='center', ha='left', color="black", fontsize=20)
     ax.text(0.5,0.5,f"{words}", 
-             va='center', ha='left', color="black", fontsize=20)
-    ax.text(0.0,0.2,f"{len(model.agents), sum([agent.wealth for agent in model.agents])}", 
              va='center', ha='left', color="black", fontsize=20)
     solara.FigureMatplotlib(fig)
 
@@ -111,7 +109,7 @@ class WealthAgent(mesa.Agent):
         else: 
             self.wealth -= self.wealth
         
-        if self.model.policy=="fascist" or self.model.policy=="communist": 
+        if self.model.policy=="powerful leaders" or self.model.policy=="equal wealth distribution": 
             party_elites = self.model.agents.select(lambda a: a.party_elite==True)
             #pay tax to the party_elite
             party_elite = self.random.choice(party_elites)
@@ -186,9 +184,9 @@ def start_up_required(model):
     
 class WealthModel(mesa.Model): 
     
-    def __init__(self, policy="innovation", population=200, start_up_required = 1, seed=42):
+    def __init__(self, policy="econophysics", population=200, start_up_required = 1, seed=42):
         
-        super().__init__()
+        super().__init__(seed=seed)
         self.policy = policy
         self.population = population
         self.party_elite = None
@@ -239,12 +237,12 @@ class WealthModel(mesa.Model):
             self.agents.shuffle_do("step")
         
         # party_elites can only receive from subordinates but never give money
-        if self.policy=="fascist": 
-            subordinates = model.agents.select(lambda a: a.party_elite==False)
+        if self.policy=="powerful leaders": 
+            subordinates = self.agents.select(lambda a: a.party_elite==False)
             subordinates.shuffle_do("step")
         
         # Divide the wealth equally among all agents at the beginning of the time step
-        if self.policy=="communist": 
+        if self.policy=="equal wealth distribution": 
             each_wealth = self.total/self.population
             for agent in self.agents: 
                 agent.wealth=each_wealth
