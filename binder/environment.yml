@@ -1,0 +1,29 @@
+
+ # a mybinder.org-ready environment for demoing jupyter_bridge
+# this environment may also be used locally on Linux/MacOS/Windows, e.g.
+#
+#   conda env update --file binder/environment.yml
+#   conda activate jupyter-bridge-demo
+#
+name: Ineqaulity simulator
+
+channels:
+  - conda-forge
+
+dependencies:
+  # runtime dependencies
+  - python >=3.10,<3.11.0a0
+  - jupyterlab >=4.0.0,<5
+  # labextension build dependencies
+  - nodejs >=18,<19
+  - pip
+  - wheel
+  # additional packages for demos
+  - ipywidgets
+  - numpy
+  - pandas
+  - solara
+  - plotly
+  - matplotlib
+  - pip:
+      - mesa[rec]>=3.0.0b2
