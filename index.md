@@ -13,12 +13,6 @@ Use the model:
 Explore the Model
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/4-Impact/inequality-simulator.git/main?labpath=https%3A%2F%2Fgithub.com%2F4-Impact%2Finequality-simulator%2Fblob%2Fmain%2FInequality.ipynb)
 
-Use the model: 
-[![py.cafe](https://img.shields.io/badge/launch-py.cafe-blue)](https://py.cafe/app/tpike3/wealth-inequality-simulation)
-
-Explore the Model
-#TODO Add Binder link
-
 Users have 4 choices - 
 1. econophysics (base model)
 2. powerful leaders (lets powerful leaders drive decisions)

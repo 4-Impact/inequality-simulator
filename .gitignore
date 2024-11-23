@@ -5,12 +5,11 @@ node_modules/
 .eslintcache
 .stylelintcache
 *.egg-info/
-.ipynb_checkpoints
+.ipynb_checkpoints/*
 */.ipynb_checkpoints
 *.tsbuildinfo
 inequality_simulator/labextension
-# Version file is handled by hatchling
-inequality/_version.py
+
 
 # Integration tests
 ui-tests/test-results/
