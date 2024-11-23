@@ -26,4 +26,4 @@ dependencies:
   - plotly
   - matplotlib
   - pip:
-      - mesa[rec]>=3.0.2
+      - mesa[rec]>=3.0.3

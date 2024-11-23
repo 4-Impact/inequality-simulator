@@ -20,7 +20,10 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
-dependencies = [
+dependencies = ["mesa",
+     "scipy",
+     "solara",
+     "matplotib"
 ]
 dynamic = ["version", "description", "authors", "urls", "keywords"]
 
@@ -29,41 +32,13 @@ docs = ["ipython",
   "myst-parser",
   "sphinx"]
 
-[tool.hatch.version]
-source = "nodejs"
-
-[tool.hatch.metadata.hooks.nodejs]
-fields = ["description", "authors", "urls"]
-
-[tool.hatch.build.targets.sdist]
-artifacts = ["jupyter_bridge/labextension"]
-exclude = [".github", "binder"]
-
-[tool.hatch.build.targets.wheel.shared-data]
-"jupyter_bridge/labextension" = "share/jupyter/labextensions/jupyter_bridge"
-"install.json" = "share/jupyter/labextensions/jupyter_bridge/install.json"
-
-[tool.hatch.build.hooks.version]
-path = "inequality_simulator/_version.py"
-
-[tool.hatch.build.hooks.jupyter-builder]
-dependencies = ["hatch-jupyter-builder>=0.5"]
-build-function = "hatch_jupyter_builder.npm_builder"
-ensured-targets = [
-    "inequality_simulator/labextension/static/style.js",
-    "inequality_simulator/labextension/package.json",
-]
-skip-if-exists = ["inequality_simulator/labextension/static/style.js"]
-
+[[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 [tool.hatch.build.hooks.jupyter-builder.build-kwargs]
 build_cmd = "build:prod"
 npm = ["jlpm"]
 
-[tool.hatch.build.hooks.jupyter-builder.editable-build-kwargs]
-build_cmd = "install:extension"
-npm = ["jlpm"]
-source_dir = "src"
-build_dir = "inequality/labextension"
 
 [tool.jupyter-releaser.options]
 version_cmd = "hatch version"
