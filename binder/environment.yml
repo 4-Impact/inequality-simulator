@@ -21,6 +21,7 @@ dependencies:
   # additional packages for demos
   - ipywidgets
   - numpy
+  - scipy
   - pandas
   - solara
   - plotly
