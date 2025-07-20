@@ -5,6 +5,9 @@ from mesa.visualization.utils import update_counter
 from mesa.visualization import SolaraViz, make_plot_component
 import solara 
 from matplotlib.figure import Figure
+import matplotlib.patches as mpatches
+import threading
+import time
 from utilities import calculate_churn, number_to_words, calc_brackets
 
 ##############################################################################################
@@ -20,13 +23,76 @@ def Histogram(model):
     # plt.figure(), for thread safety purpose
     fig = Figure()
     ax = fig.subplots()
-    wealth_vals = [agent.wealth for agent in model.agents]
-    # Note: you have to use Matplotlib's OOP API instead of plt.hist
-    # because plt.hist is not thread-safe.
-    ax.hist(wealth_vals, bins=10)
+    
+    if model.policy == "comparison" and hasattr(model, 'comparison_results') and model.comparison_results is not None:
+        # Plot all policies' final wealth distributions
+        policies = ["econophysics", "powerful leaders", "equal wealth distribution", "innovation"]
+        colors = ['blue', 'red', 'green', 'orange']
+        
+        for i, policy in enumerate(policies):
+            if policy in model.comparison_results:
+                final_wealth = model.comparison_results[policy]['final_wealth']
+                ax.hist(final_wealth, bins=15, alpha=0.6, label=policy, color=colors[i])
+        
+        ax.set_title('Final Wealth Distribution - All Policies')
+        ax.set_xlabel('Wealth')
+        ax.set_ylabel('Frequency')
+        ax.legend()
+    else:
+        # Show current model's wealth distribution
+        wealth_vals = [agent.wealth for agent in model.agents]
+        ax.hist(wealth_vals, bins=10)
+        ax.set_title(f'Wealth Distribution - {model.policy}')
+        ax.set_xlabel('Wealth')
+        ax.set_ylabel('Frequency')
+    
     solara.FigureMatplotlib(fig)
 
 @solara.component
+def Mobility(model): 
+    update_counter.get()
+
+    # --- 1. Pull data from the model ------------------------------------------
+    agents   = model.agents              # or however you reference them
+    classes  = np.array([a.bracket   for a in agents])
+    mobility = np.array([a.mobility  for a in agents])
+
+    # --- 2. Map class → y-coordinate & color -----------------------------------
+    class_to_y = {"Lower": 0, "Middle": 1, "Upper": 2}
+    y = np.vectorize(class_to_y.get)(classes)
+    
+    # optional color mapping (comment out if you don’t need colors)
+    class_to_color = {"Lower": "tab:red", "Middle": "tab:blue", "Upper": "tab:green"}
+    colors = np.vectorize(class_to_color.get)(classes)
+
+    # --- 3. Choose x-positions -------------------------------------------------
+    # any scheme works; here we jitter agents within 50 equally-spaced slots
+    rng = np.random.default_rng(seed=42)
+    x  = rng.uniform(0, 50, size=len(agents))
+    # --- 4. Scale mobility to point size --------------------------------------
+    # Square-root scaling keeps big numbers from dominating visually
+    sizes = 20 * np.sqrt(mobility + 1)  # add 1 so size≠0
+
+    # --- 5. Plot ---------------------------------------------------------------
+    fig = Figure()
+    ax = fig.subplots()
+    ax.scatter(x, y, s=sizes, c=colors, alpha=0.7, edgecolors="k", linewidths=0.5)
+    
+    # --- 6. Cosmetics ----------------------------------------------------------
+    ax.set_xlim(0, 50)
+    ax.set_xticks([])                           # hide x ticks if they’re meaningless
+    ax.set_yticks([0, 1, 2])
+    ax.set_yticklabels(["Lower", "Middle", "Upper"])
+    ax.set_title("Agent Economic Class vs. Mobility")
+
+    # Make a legend keyed to class, not size
+    for cls, yc in class_to_y.items():
+        ax.scatter([], [], s=50, color=class_to_color[cls], label=cls.capitalize())
+    ax.legend(title="Class", frameon=False, bbox_to_anchor=(1.05, 1))
+
+    solara.FigureMatplotlib(fig)
+
+'''
 def Churn(model): 
     update_counter.get()
 
@@ -41,14 +107,14 @@ def Churn(model):
     ax.text(0.6, 0.3, f"Moving Down {round((churn_details[1]/200)*100,2)}%", va='center', ha='left', color="black", fontsize=15)
     
     solara.FigureMatplotlib(fig)
-
+'''
 def compute_gini(model):
     agent_wealths = [abs(float(agent.wealth)) for agent in model.agents]
     x = sorted(agent_wealths)
     N = model.population
     B = sum(xi * (N - i) for i, xi in enumerate(x)) / (N * sum(x))
     return 1 + (1 / N) - 2 * B
-
+'''
 @solara.component
 def Wealth(model): 
     update_counter.get()
@@ -62,9 +128,71 @@ def Wealth(model):
     ax.text(0.5,0.5,f"{words}", 
              va='center', ha='left', color="black", fontsize=20)
     solara.FigureMatplotlib(fig)
-
+'''
 def total_wealth(model): 
     return sum([agent.wealth for agent in model.agents])
+
+@solara.component
+def GiniPlot(model):
+    """Custom Gini plot that shows comparison data when in comparison mode"""
+    update_counter.get()
+    fig = Figure()
+    ax = fig.subplots()
+    
+    if model.policy == "comparison" and hasattr(model, 'comparison_results') and model.comparison_results is not None:
+        # Plot Gini coefficient over time for all policies
+        policies = ["econophysics", "powerful leaders", "equal wealth distribution", "innovation"]
+        colors = ['blue', 'red', 'green', 'orange']
+        
+        for i, policy in enumerate(policies):
+            if policy in model.comparison_results:
+                data = model.comparison_results[policy]
+                steps = range(len(data['gini']))
+                ax.plot(steps, data['gini'], label=policy, color=colors[i], linewidth=2)
+        
+        ax.set_title('Gini Coefficient Over Time - All Policies')
+        ax.set_xlabel('Time Steps')
+        ax.set_ylabel('Gini Coefficient')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+    else:
+        # Show message that comparison data is not available
+        ax.text(0.5, 0.5, f"Gini data for {model.policy}\nSelect 'comparison' to see all policies", 
+                ha='center', va='center', fontsize=12, transform=ax.transAxes)
+        ax.axis('off')
+    
+    solara.FigureMatplotlib(fig)
+
+@solara.component  
+def TotalWealthPlot(model):
+    """Custom Total Wealth plot that shows comparison data when in comparison mode"""
+    update_counter.get()
+    fig = Figure()
+    ax = fig.subplots()
+    
+    if model.policy == "comparison" and hasattr(model, 'comparison_results') and model.comparison_results is not None:
+        # Plot total wealth over time for all policies
+        policies = ["econophysics", "powerful leaders", "equal wealth distribution", "innovation"]
+        colors = ['blue', 'red', 'green', 'orange']
+        
+        for i, policy in enumerate(policies):
+            if policy in model.comparison_results:
+                data = model.comparison_results[policy]
+                steps = range(len(data['total']))
+                ax.plot(steps, data['total'], label=policy, color=colors[i], linewidth=2)
+        
+        ax.set_title('Total Wealth Over Time - All Policies')
+        ax.set_xlabel('Time Steps')
+        ax.set_ylabel('Total Wealth')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+    else:
+        # Show message that comparison data is not available
+        ax.text(0.5, 0.5, f"Total wealth for {model.policy}\nSelect 'comparison' to see all policies", 
+                ha='center', va='center', fontsize=12, transform=ax.transAxes)
+        ax.axis('off')
+    
+    solara.FigureMatplotlib(fig)
 
 #######################################################################################################
 
@@ -82,6 +210,7 @@ class WealthAgent(mesa.Agent):
         self.party_elite = party_elite
         self.bracket = "Middle"
         self.previous = "Middle"
+        self.mobility = 0
         self.W = proportion
         self.I = innovation
         self.ioriginal = innovation
@@ -129,6 +258,11 @@ class WealthAgent(mesa.Agent):
             self.bracket = "Upper"
         else: 
             self.bracket = "Middle"
+
+        if self.bracket == self.previous: 
+            self.mobility += 1
+        else:
+            self.mobility = 0
         """
                             INNOVATION
         """
@@ -147,7 +281,7 @@ class WealthAgent(mesa.Agent):
 
 
     def calc_brackets(model): 
-        most = max([agent.wealth for agent in self.model.agents])
+        most = max([agent.wealth for agent in model.agents])
         print(f"Most {most}")
         return [int(most*0.33), int(most*0.67)]
 
@@ -196,9 +330,12 @@ class WealthModel(mesa.Model):
         self.brackets = [0.75,1.25]
         self.start_up_required = start_up_required
         self.inital_capital = 1.5
+        self.comparison_results = None
+        self.comparison_running = False
         
         self.datacollector = mesa.DataCollector(model_reporters = {"Gini": compute_gini,"Total": total_wealth },
-                                               agent_reporters={"Wealth":"wealth", "Bracket":"bracket","Pay":"W" })
+                                               agent_reporters={"Wealth":"wealth", "Bracket":"bracket","Pay":"W",
+                                                                "Mobility": "mobility"})
         
         
         mean = 0.2      # mean of the distribution
@@ -227,28 +364,93 @@ class WealthModel(mesa.Model):
                 party_elite=True
             WealthAgent(self, float(payday_array[idx]), float(innovation_array[idx]), party_elite)
     
+    def run_single_policy_model(self, policy_name, steps=50):
+        """Run a single model with the specified policy for comparison"""
+        # Create a new model with the same parameters but different policy
+        comparison_model = WealthModel(policy=policy_name, 
+                                     population=self.population, 
+                                     start_up_required=self.start_up_required,
+                                     seed=42)  # Use same seed for fair comparison
+        
+        gini_data = []
+        total_data = []
+        
+        # Run the model for specified steps
+        for _ in range(steps):
+            comparison_model.step()
+            gini_data.append(compute_gini(comparison_model))
+            total_data.append(total_wealth(comparison_model))
+        
+        # Collect final state data
+        final_wealth = [agent.wealth for agent in comparison_model.agents]
+        final_classes = [agent.bracket for agent in comparison_model.agents]
+        
+        return {
+            'gini': gini_data,
+            'total': total_data,
+            'final_wealth': final_wealth,
+            'final_classes': final_classes
+        }
+    
+    def run_comparison_models(self):
+        """Run all policy models in parallel threads"""
+        if self.comparison_running:
+            return
+            
+        self.comparison_running = True
+        self.comparison_results = {}
+        
+        policies = ["econophysics", "powerful leaders", "equal wealth distribution", "innovation"]
+        threads = []
+        results = {}
+        
+        def run_policy(policy):
+            results[policy] = self.run_single_policy_model(policy)
+        
+        # Start threads for each policy
+        for policy in policies:
+            thread = threading.Thread(target=run_policy, args=(policy,))
+            threads.append(thread)
+            thread.start()
+        
+        # Wait for all threads to complete
+        for thread in threads:
+            thread.join()
+        
+        self.comparison_results = results
+        self.comparison_running = False
+    
     def step(self):
         self.brackets = calc_brackets(self)
         self.total = total_wealth(self)
         #Deternine survival cost based on inflation
         exp_scale = np.mean([agent.wealth for agent in self.agents])
         self.survival_cost = expon.ppf(0.1, scale=exp_scale)
+        
+        if self.policy == "comparison":
+            # Run comparison models if not already running and no results exist
+            if not self.comparison_running and self.comparison_results is None:
+                # Start comparison in a separate thread to avoid blocking
+                comparison_thread = threading.Thread(target=self.run_comparison_models)
+                comparison_thread.start()
+            return  # Don't run normal step for comparison mode
+        
         if self.policy=="econophysics": 
             self.agents.shuffle_do("step")
         
         # party_elites can only receive from subordinates but never give money
-        if self.policy=="powerful leaders": 
+        elif self.policy=="powerful leaders": 
             subordinates = self.agents.select(lambda a: a.party_elite==False)
             subordinates.shuffle_do("step")
         
         # Divide the wealth equally among all agents at the beginning of the time step
-        if self.policy=="equal wealth distribution": 
+        elif self.policy=="equal wealth distribution": 
             each_wealth = self.total/self.population
             for agent in self.agents: 
                 agent.wealth=each_wealth
             self.agents.shuffle_do("step")
 
-        if self.policy=="innovation": 
+        elif self.policy=="innovation": 
             bins = start_up_required(self)
             if self.start_up_required==1: 
                 self.initial_capital = bins[0]
