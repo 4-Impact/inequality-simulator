@@ -1,3 +1,5 @@
-solara
+flask
+flask-cors
 mesa[rec]
 scipy
+numpy
