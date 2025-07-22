@@ -37,8 +37,13 @@ def json_response(data):
     )
 
 @app.route('/')
-def index():
-    """Serve the main HTML page"""
+def landing():
+    """Serve the landing page"""
+    return send_from_directory('static', 'landing.html')
+
+@app.route('/simulator')
+def simulator():
+    """Serve the main simulator page"""
     return send_from_directory('static', 'index.html')
 
 @app.route('/<path:filename>')
@@ -62,6 +67,10 @@ def initialize_model():
             start_up_required=start_up_required,
             seed=42
         )
+        
+        # Set default comparison steps for comparison models
+        if policy == "comparison":
+            current_model.set_comparison_steps(50)  # Default, will be updated when run is called
     
     return jsonify({'status': 'success', 'message': 'Model initialized'})
 
@@ -72,7 +81,15 @@ def step_model():
     if current_model is None:
         return jsonify({'error': 'Model not initialized'}), 400
     
+    data = request.get_json() or {}
+    steps_for_comparison = data.get('comparison_steps', 50)
+    
     with model_lock:
+        # For comparison models, only set steps if not already set or if different
+        if current_model.policy == "comparison":
+            if not hasattr(current_model, 'comparison_steps') or current_model.comparison_steps != steps_for_comparison:
+                current_model.set_comparison_steps(steps_for_comparison)
+        
         current_model.step()
         current_model.datacollector.collect(current_model)
     
@@ -89,6 +106,10 @@ def run_model():
     steps = data.get('steps', 50)
     
     with model_lock:
+        # Set comparison steps if this is for comparison mode
+        if current_model.policy == "comparison":
+            current_model.set_comparison_steps(steps)
+        
         for _ in range(steps):
             current_model.step()
             current_model.datacollector.collect(current_model)
@@ -124,8 +145,15 @@ def get_mobility_data():
         return jsonify({'error': 'Model not initialized'}), 400
     
     with model_lock:
+        # For comparison mode, use data from the econophysics model as representative
+        if current_model.policy == "comparison" and hasattr(current_model, 'comparison_models') and current_model.comparison_models:
+            # Use the econophysics model for mobility visualization
+            model_to_use = current_model.comparison_models.get('econophysics', current_model)
+        else:
+            model_to_use = current_model
+            
         agents_data = []
-        for agent in current_model.agents:
+        for agent in model_to_use.agents:
             agents_data.append({
                 'bracket': agent.bracket,
                 'mobility': agent.mobility,
@@ -196,8 +224,7 @@ def get_status():
             'initialized': True,
             'policy': current_model.policy,
             'population': current_model.population,
-            'step_count': current_model.schedule.steps if hasattr(current_model, 'schedule') else 0,
-            'comparison_running': getattr(current_model, 'comparison_running', False)
+            'step_count': getattr(current_model, 'comparison_step_count', 0) if current_model.policy == "comparison" else (current_model.schedule.steps if hasattr(current_model, 'schedule') else 0)
         }
         return json_response(status)
 
