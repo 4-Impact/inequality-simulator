@@ -77,8 +77,9 @@ py_cafe/
 ├── model.py                # Original Mesa model (Solara components removed)
 ├── utilities.py            # Helper functions
 ├── requirements.txt        # Python dependencies
-├── static/
-│   ├── index.html         # Main web interface
+├── docs/
+│   ├── index.html         # Landing page
+│   ├── landing.html       # Main web interface
 │   └── app.js             # Frontend JavaScript logic
 └── __pycache__/           # Python cache files
 ```
@@ -110,8 +111,9 @@ py_cafe/
 ## Development
 
 To modify the frontend:
-- Edit `static/index.html` for layout changes
-- Edit `static/app.js` for functionality changes
+- Edit `docs/index.html` for landing page changes
+- Edit `docs/landing.html` for main interface layout changes
+- Edit `docs/app.js` for functionality changes
 - Edit `backend.py` for API modifications
 
 The system is designed to be easily extensible with additional visualization types and model parameters.
