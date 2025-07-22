@@ -12,6 +12,7 @@ import threading
 import time
 
 app = Flask(__name__, static_folder='docs', static_url_path='')
+
 CORS(app)
 
 # Global model instance
@@ -50,6 +51,7 @@ def simulator():
 def static_files(filename):
     """Serve static files (JS, CSS, etc.)"""
     return send_from_directory('docs', filename)
+
 
 @app.route('/api/initialize', methods=['POST'])
 def initialize_model():
