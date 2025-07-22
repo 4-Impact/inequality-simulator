@@ -6,7 +6,6 @@ from mesa.visualization import SolaraViz, make_plot_component
 import solara 
 from matplotlib.figure import Figure
 import matplotlib.patches as mpatches
-import threading
 import time
 from utilities import calculate_churn, number_to_words, calc_brackets
 
@@ -332,6 +331,9 @@ class WealthModel(mesa.Model):
         self.inital_capital = 1.5
         self.comparison_results = None
         self.comparison_running = False
+        self.comparison_steps = 50  # Default steps for comparison models
+        self.comparison_models = {}  # Store individual policy models
+        self.comparison_step_count = 0  # Track current step in comparison
         
         self.datacollector = mesa.DataCollector(model_reporters = {"Gini": compute_gini,"Total": total_wealth },
                                                agent_reporters={"Wealth":"wealth", "Bracket":"bracket","Pay":"W",
@@ -364,75 +366,82 @@ class WealthModel(mesa.Model):
                 party_elite=True
             WealthAgent(self, float(payday_array[idx]), float(innovation_array[idx]), party_elite)
     
-    def run_single_policy_model(self, policy_name, steps=50):
-        """Run a single model with the specified policy for comparison"""
-        # Create a new model with the same parameters but different policy
-        comparison_model = WealthModel(policy=policy_name, 
-                                     population=self.population, 
-                                     start_up_required=self.start_up_required,
-                                     seed=42)  # Use same seed for fair comparison
-        
-        gini_data = []
-        total_data = []
-        
-        # Run the model for specified steps
-        for _ in range(steps):
-            comparison_model.step()
-            gini_data.append(compute_gini(comparison_model))
-            total_data.append(total_wealth(comparison_model))
-        
-        # Collect final state data
-        final_wealth = [agent.wealth for agent in comparison_model.agents]
-        final_classes = [agent.bracket for agent in comparison_model.agents]
-        
-        return {
-            'gini': gini_data,
-            'total': total_data,
-            'final_wealth': final_wealth,
-            'final_classes': final_classes
-        }
-    
-    def run_comparison_models(self):
-        """Run all policy models in parallel threads"""
-        if self.comparison_running:
-            return
-            
-        self.comparison_running = True
-        self.comparison_results = {}
-        
+    def initialize_comparison_models(self):
+        """Initialize separate models for each policy"""
         policies = ["econophysics", "powerful leaders", "equal wealth distribution", "innovation"]
-        threads = []
-        results = {}
+        self.comparison_models = {}
+        self.comparison_results = {policy: {'gini': [], 'total': [], 'final_wealth': [], 'final_classes': []} for policy in policies}
+        self.comparison_step_count = 0
         
-        def run_policy(policy):
-            results[policy] = self.run_single_policy_model(policy)
-        
-        # Start threads for each policy
         for policy in policies:
-            thread = threading.Thread(target=run_policy, args=(policy,))
-            threads.append(thread)
-            thread.start()
+            model = WealthModel(
+                policy=policy,
+                population=self.population,
+                start_up_required=self.start_up_required,
+                seed=42  # Use same seed for fair comparison
+            )
+            self.comparison_models[policy] = model
+            
+            # Collect initial data (step 0)
+            gini = compute_gini(model)
+            total = total_wealth(model)
+            self.comparison_results[policy]['gini'].append(gini)
+            self.comparison_results[policy]['total'].append(total)
+            
+        print(f"Initialized comparison models with initial data")
+    
+    def step_comparison_models(self):
+        """Run one step for each comparison model and collect data"""
+        if not hasattr(self, 'comparison_models') or not self.comparison_models:
+            self.initialize_comparison_models()
         
-        # Wait for all threads to complete
-        for thread in threads:
-            thread.join()
+        for policy, model in self.comparison_models.items():
+            # Run one step for this model
+            model.step()
+            model.datacollector.collect(model)
+            
+            # Collect data
+            gini = compute_gini(model)
+            total = total_wealth(model)
+            
+            print(f"Step {self.comparison_step_count}, Policy: {policy}, Gini: {gini:.3f}, Total: {total:.2f}")
+            
+            self.comparison_results[policy]['gini'].append(gini)
+            self.comparison_results[policy]['total'].append(total)
         
-        self.comparison_results = results
-        self.comparison_running = False
+        self.comparison_step_count += 1
+        
+        # Update final state data
+        for policy, model in self.comparison_models.items():
+            self.comparison_results[policy]['final_wealth'] = [agent.wealth for agent in model.agents]
+            self.comparison_results[policy]['final_classes'] = [agent.bracket for agent in model.agents]
+    
+    def set_comparison_steps(self, steps):
+        """Set the number of steps for comparison models"""
+        # Only reset if steps actually changed
+        if hasattr(self, 'comparison_steps') and self.comparison_steps == steps:
+            return  # No change needed
+            
+        self.comparison_steps = steps
+        # Reset comparison data only if steps changed
+        if hasattr(self, 'comparison_models'):
+            print(f"Resetting comparison models for {steps} steps")
+            self.initialize_comparison_models()
     
     def step(self):
         self.brackets = calc_brackets(self)
         self.total = total_wealth(self)
-        #Deternine survival cost based on inflation
+        # Determine survival cost based on inflation
         exp_scale = np.mean([agent.wealth for agent in self.agents])
         self.survival_cost = expon.ppf(0.1, scale=exp_scale)
         
         if self.policy == "comparison":
-            # Run comparison models if not already running and no results exist
-            if not self.comparison_running and self.comparison_results is None:
-                # Start comparison in a separate thread to avoid blocking
-                comparison_thread = threading.Thread(target=self.run_comparison_models)
-                comparison_thread.start()
+            # Initialize comparison models if needed
+            if not hasattr(self, 'comparison_models') or not self.comparison_models:
+                self.initialize_comparison_models()
+            
+            # Run one step for all comparison models
+            self.step_comparison_models()
             return  # Don't run normal step for comparison mode
         
         if self.policy=="econophysics": 

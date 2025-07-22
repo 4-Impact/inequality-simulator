@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inequality Simulator - Welcome</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Background animation */
+        .background-animation {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(33, 150, 243, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(76, 175, 80, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(255, 152, 0, 0.1) 0%, transparent 50%);
+            animation: backgroundShift 20s ease-in-out infinite;
+            z-index: -1;
+        }
+
+        @keyframes backgroundShift {
+            0%, 100% { transform: scale(1) rotate(0deg); }
+            50% { transform: scale(1.1) rotate(180deg); }
+        }
+
+        .container {
+            text-align: center;
+            z-index: 1;
+            max-width: 800px;
+            padding: 20px;
+        }
+
+        .title {
+            font-size: 3.5rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #2196f3, #4caf50, #ff9800);
+            background-size: 200% 200%;
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: gradientShift 4s ease-in-out infinite;
+        }
+
+        @keyframes gradientShift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            color: #b0b0b0;
+            margin-bottom: 3rem;
+            line-height: 1.6;
+        }
+
+        /* 3D Cube Container */
+        .cube-container {
+            perspective: 1000px;
+            margin: 2rem 0;
+            height: 250px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .cube {
+            width: 200px;
+            height: 200px;
+            position: relative;
+            transform-style: preserve-3d;
+            animation: rotateCube 12s infinite linear;
+        }
+
+        @keyframes rotateCube {
+            0% { transform: rotateX(0deg) rotateY(0deg); }
+            33.33% { transform: rotateX(90deg) rotateY(120deg); }
+            66.66% { transform: rotateX(180deg) rotateY(240deg); }
+            100% { transform: rotateX(360deg) rotateY(360deg); }
+        }
+
+        .cube-face {
+            position: absolute;
+            width: 200px;
+            height: 200px;
+            background: linear-gradient(135deg, #2d2d2d, #1a1a1a);
+            border: 2px solid #404040;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 16px;
+            font-weight: bold;
+            text-align: center;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .cube-face.front {
+            transform: translateZ(100px);
+        }
+
+        .cube-face.back {
+            transform: translateZ(-100px) rotateY(180deg);
+        }
+
+        .cube-face.right {
+            transform: rotateY(90deg) translateZ(100px);
+        }
+
+        .cube-face.left {
+            transform: rotateY(-90deg) translateZ(100px);
+        }
+
+        .cube-face.top {
+            transform: rotateX(90deg) translateZ(100px);
+        }
+
+        .cube-face.bottom {
+            transform: rotateX(-90deg) translateZ(100px);
+        }
+
+        .cube-text {
+            color: white;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+            line-height: 1.3;
+        }
+
+        .cta-button {
+            background: linear-gradient(135deg, #2196f3, #1976d2);
+            color: white;
+            border: none;
+            padding: 16px 40px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 25px rgba(33, 150, 243, 0.3);
+            text-decoration: none;
+            display: inline-block;
+            margin-top: 2rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cta-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .cta-button:hover::before {
+            left: 100%;
+        }
+
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 35px rgba(33, 150, 243, 0.4);
+        }
+
+        .cta-button:active {
+            transform: translateY(0);
+        }
+
+        /* Floating particles */
+        .particle {
+            position: absolute;
+            background: rgba(33, 150, 243, 0.6);
+            border-radius: 50%;
+            pointer-events: none;
+            animation: float 6s ease-in-out infinite;
+        }
+
+        .particle:nth-child(1) {
+            width: 4px;
+            height: 4px;
+            top: 20%;
+            left: 10%;
+            animation-delay: 0s;
+        }
+
+        .particle:nth-child(2) {
+            width: 6px;
+            height: 6px;
+            top: 60%;
+            left: 80%;
+            animation-delay: 2s;
+        }
+
+        .particle:nth-child(3) {
+            width: 3px;
+            height: 3px;
+            top: 80%;
+            left: 20%;
+            animation-delay: 4s;
+        }
+
+        .particle:nth-child(4) {
+            width: 5px;
+            height: 5px;
+            top: 30%;
+            left: 70%;
+            animation-delay: 1s;
+        }
+
+        .particle:nth-child(5) {
+            width: 4px;
+            height: 4px;
+            top: 70%;
+            left: 90%;
+            animation-delay: 3s;
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0) scale(1);
+                opacity: 0.7;
+            }
+            50% {
+                transform: translateY(-20px) scale(1.2);
+                opacity: 1;
+            }
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .title {
+                font-size: 2.5rem;
+            }
+
+            .subtitle {
+                font-size: 1rem;
+            }
+
+            .cube {
+                width: 160px;
+                height: 160px;
+            }
+
+            .cube-face {
+                width: 160px;
+                height: 160px;
+                font-size: 14px;
+                padding: 15px;
+            }
+
+            .cube-face.front { transform: translateZ(80px); }
+            .cube-face.back { transform: translateZ(-80px) rotateY(180deg); }
+            .cube-face.right { transform: rotateY(90deg) translateZ(80px); }
+            .cube-face.left { transform: rotateY(-90deg) translateZ(80px); }
+            .cube-face.top { transform: rotateX(90deg) translateZ(80px); }
+            .cube-face.bottom { transform: rotateX(-90deg) translateZ(80px); }
+
+            .cta-button {
+                padding: 14px 30px;
+                font-size: 1rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .title {
+                font-size: 2rem;
+            }
+
+            .container {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="background-animation"></div>
+    
+    <!-- Floating particles -->
+    <div class="particle"></div>
+    <div class="particle"></div>
+    <div class="particle"></div>
+    <div class="particle"></div>
+    <div class="particle"></div>
+
+    <div class="container">
+        <h1 class="title">Inequality Simulator</h1>
+        <p class="subtitle">
+            Explore the dynamics of wealth distribution through advanced agent-based modeling.<br>
+            Discover how economic policies shape society's future.
+        </p>
+
+        <div class="cube-container">
+            <div class="cube">
+                <div class="cube-face front">
+                    <div class="cube-text">
+                        Wealth Distribution<br>   
+                    </div>
+                </div>
+                <div class="cube-face back">
+                    <div class="cube-text">
+                        Virtual<br>
+                        Labs
+                    </div>
+                </div>
+                <div class="cube-face right">
+                    <div class="cube-text">
+                        Social<br>
+                        Justice
+                    </div>
+                </div>
+                <div class="cube-face left">
+                    <div class="cube-text">
+                        Keep What You Earn
+                    </div>
+                </div>
+                <div class="cube-face top">
+                    <div class="cube-text">
+                        Wealth<br>
+                        Distribution
+                    </div>
+                </div>
+                <div class="cube-face bottom">
+                    <div class="cube-text">
+                        Policy<br>
+                        Analysis
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <a href="simulator" class="cta-button">
+            Launch Simulator
+        </a>
+    </div>
+</body>
+</html>
