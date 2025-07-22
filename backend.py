@@ -11,7 +11,7 @@ from model import WealthModel, compute_gini, total_wealth
 import threading
 import time
 
-app = Flask(__name__, static_folder='static', static_url_path='')
+app = Flask(__name__, static_folder='docs', static_url_path='')
 CORS(app)
 
 # Global model instance
@@ -39,17 +39,17 @@ def json_response(data):
 @app.route('/')
 def landing():
     """Serve the landing page"""
-    return send_from_directory('static', 'landing.html')
+    return send_from_directory('docs', 'index.html')
 
 @app.route('/simulator')
 def simulator():
     """Serve the main simulator page"""
-    return send_from_directory('static', 'index.html')
+    return send_from_directory('docs', 'landing.html')
 
 @app.route('/<path:filename>')
 def static_files(filename):
     """Serve static files (JS, CSS, etc.)"""
-    return send_from_directory('static', filename)
+    return send_from_directory('docs', filename)
 
 @app.route('/api/initialize', methods=['POST'])
 def initialize_model():
