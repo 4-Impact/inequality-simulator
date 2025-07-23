@@ -3,3 +3,4 @@ flask-cors
 mesa[rec]
 scipy
 numpy
+gunicorn
