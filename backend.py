@@ -13,7 +13,8 @@ import time
 
 app = Flask(__name__, static_folder='docs', static_url_path='')
 
-CORS(app)
+# Configure CORS to allow GitHub Pages and other origins
+CORS(app, origins=['*'])
 
 # Global model instance
 current_model = None
@@ -233,4 +234,7 @@ def get_status():
 if __name__ == '__main__':
     # Initialize with default model
     current_model = WealthModel()
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # Use environment port for production, fallback to 5000 for local
+    import os
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=False, host='0.0.0.0', port=port)
