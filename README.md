@@ -1,13 +1,119 @@
-# Inequality Simulator
+# Inequality Simulator - Custom Frontend
 
-Much of our current conversation about wealth inequality is stuck in the 1800s. However, humanity has learned a lot since the 1800s (horse drawn wagons vs rockets).
+This project has been converted from a Solara-based frontend to a custom HTML/JavaScript frontend with a Flask backend API.
 
-This simulation helps users explore different govenrment policies to see their impact. The base model is the Bouchaud and Mezard's [Wealth Condensation in a Simple Model of Economy](Wealth condensation in a simple model of economy), which used physics based dynamics to identify that economic phenomenon are similar to stastistical physics. This simulation then layers in different policies of Powerful leaders, Equal wealth distribution, and access to capital for innovation. This allows users to see the impact of these four strategies on wealth creation, the ability to move from one economic class to another, this distribution of wealth, and the gini coefficient which is a measure of wealth distribution (1 - means one person has all the wealth and 0 means each person has the exact same amount of wealth). **This should not be used to implement policy, but should be used to help humanity get past antiquated conversations of the economics that defy known physical properties.**   
+## Architecture
 
+- **Backend**: Flask REST API (`backend.py`) that serves the model data
+- **Frontend**: Vanilla HTML/CSS/JavaScript (no React) in the `static/` folder
+- **Model**: Original Mesa-based inequality simulation model
 
+## Setup and Installation
 
-Users have 4 choices - 
-1. econophysics (base model)
-2. powerful leaders (lets powerful leaders drive decisions)
-3. equal wealth distribution
-4. innovation (individuals receive an innovation multiplier and if they receiv enough money can invest)
+1. Install the required Python packages:
+```bash
+pip install -r requirements.txt
+```
+
+2. Run the application:
+```bash
+python run.py
+```
+
+This will:
+- Start the Flask backend on http://localhost:5000
+- Automatically open your browser to the frontend interface
+- Provide API endpoints for the frontend to consume
+
+## Usage
+
+### Web Interface
+
+The web interface provides:
+- **Policy Selection**: Choose from different economic policies
+- **Population Settings**: Adjust the number of agents
+- **Startup Requirements**: Set different capital requirements for innovation
+- **Real-time Visualization**: Charts showing:
+  - Wealth distribution histogram
+  - Economic mobility scatter plot
+  - Gini coefficient over time
+  - Total wealth over time
+
+### Controls
+
+- **Initialize Model**: Create a new model with selected parameters
+- **Step**: Run one simulation step
+- **Run 50 Steps**: Execute 50 simulation steps at once
+- **Refresh Charts**: Update all visualizations with current data
+
+### Policies Available
+
+1. **Econophysics**: Basic wealth exchange model
+2. **Powerful Leaders**: Party elites collect taxes from subordinates
+3. **Equal Wealth Distribution**: Wealth is redistributed equally each step
+4. **Innovation**: Agents can invest in innovation to increase income
+5. **Comparison**: Run all policies simultaneously and compare results
+
+## API Endpoints
+
+The Flask backend provides the following REST API endpoints:
+
+- `GET /` - Serve the main HTML interface
+- `POST /api/initialize` - Initialize a new model
+- `POST /api/step` - Run one simulation step
+- `POST /api/run` - Run multiple simulation steps
+- `GET /api/data/wealth-distribution` - Get wealth distribution data
+- `GET /api/data/mobility` - Get mobility data for visualization
+- `GET /api/data/gini` - Get Gini coefficient data over time
+- `GET /api/data/total-wealth` - Get total wealth data over time
+- `GET /api/status` - Get current model status
+
+## File Structure
+
+```
+py_cafe/
+├── backend.py              # Flask REST API server
+├── run.py                  # Main application runner
+├── model.py                # Original Mesa model (Solara components removed)
+├── utilities.py            # Helper functions
+├── requirements.txt        # Python dependencies
+├── docs/
+│   ├── index.html         # Landing page
+│   ├── landing.html       # Main web interface
+│   └── app.js             # Frontend JavaScript logic
+└── __pycache__/           # Python cache files
+```
+
+## Key Changes from Solara Version
+
+1. **Removed Solara Dependencies**: No longer requires Solara or Jupyter
+2. **Added Flask Backend**: REST API for model operations
+3. **Custom Frontend**: Pure HTML/CSS/JavaScript interface
+4. **Chart.js Visualizations**: Interactive charts without Matplotlib backend
+5. **Asynchronous Updates**: Non-blocking chart updates and model execution
+
+## Features
+
+- **No React Dependency**: Uses vanilla JavaScript for all frontend logic
+- **Responsive Design**: Works on desktop and mobile devices
+- **Real-time Updates**: Charts update dynamically as the model runs
+- **Error Handling**: Graceful error messages and recovery
+- **Comparison Mode**: Run multiple policies simultaneously
+- **Thread-safe**: Backend handles concurrent requests safely
+
+## Troubleshooting
+
+- **Port 5000 in use**: Change the port in `backend.py` and `run.py`
+- **Charts not updating**: Check browser console for JavaScript errors
+- **Model not initializing**: Ensure all dependencies are installed correctly
+- **CORS errors**: The Flask-CORS extension should handle cross-origin requests
+
+## Development
+
+To modify the frontend:
+- Edit `docs/index.html` for landing page changes
+- Edit `docs/landing.html` for main interface layout changes
+- Edit `docs/app.js` for functionality changes
+- Edit `backend.py` for API modifications
+
+The system is designed to be easily extensible with additional visualization types and model parameters.
