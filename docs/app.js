@@ -3,7 +3,22 @@
 
 class InequalitySimulator {
     constructor() {
-        this.apiBase = 'http://localhost:5000/api';
+        // Dynamic API base URL detection
+        const hostname = window.location.hostname;
+        const isGitHubPages = hostname.includes('github.io');
+        const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+        
+        if (isGitHubPages) {
+            // Use deployed backend URL - UPDATE THIS with your actual Render URL
+            this.apiBase = 'https://inequality-simulator.onrender.com/api';
+        } else if (isLocalhost) {
+            // Local development on laptop
+            this.apiBase = 'http://localhost:5000/api';
+        } else {
+            // Local network access (for mobile testing) - using your laptop's IP
+            this.apiBase = 'http://192.168.50.4:5000/api';
+        }
+        
         this.charts = {};
         this.isInitialized = false;
         this.isRunning = false;

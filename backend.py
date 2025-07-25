@@ -11,8 +11,10 @@ from model import WealthModel, compute_gini, total_wealth
 import threading
 import time
 
-app = Flask(__name__, static_folder='static', static_url_path='')
-CORS(app)
+app = Flask(__name__, static_folder='docs', static_url_path='')
+
+# Configure CORS to allow GitHub Pages and other origins
+CORS(app, origins=['*'])
 
 # Global model instance
 current_model = None
@@ -39,17 +41,18 @@ def json_response(data):
 @app.route('/')
 def landing():
     """Serve the landing page"""
-    return send_from_directory('static', 'landing.html')
+    return send_from_directory('docs', 'index.html')
 
 @app.route('/simulator')
 def simulator():
     """Serve the main simulator page"""
-    return send_from_directory('static', 'index.html')
+    return send_from_directory('docs', 'landing.html')
 
 @app.route('/<path:filename>')
 def static_files(filename):
     """Serve static files (JS, CSS, etc.)"""
-    return send_from_directory('static', filename)
+    return send_from_directory('docs', filename)
+
 
 @app.route('/api/initialize', methods=['POST'])
 def initialize_model():
@@ -231,4 +234,7 @@ def get_status():
 if __name__ == '__main__':
     # Initialize with default model
     current_model = WealthModel()
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # Use environment port for production, fallback to 5000 for local
+    import os
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=False, host='0.0.0.0', port=port)
