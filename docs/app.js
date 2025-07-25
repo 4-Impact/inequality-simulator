@@ -9,8 +9,8 @@ class InequalitySimulator {
         const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
         
         if (isGitHubPages) {
-            // Use deployed backend URL (you'll need to update this with your actual deployed URL)
-            this.apiBase = 'https://your-app-name.onrender.com/api';
+            // Use deployed backend URL - UPDATE THIS with your actual Render URL
+            this.apiBase = 'https://inequality-simulator.onrender.com/api';
         } else if (isLocalhost) {
             // Local development on laptop
             this.apiBase = 'http://localhost:5000/api';
