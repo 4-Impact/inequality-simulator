@@ -9,14 +9,41 @@ class InequalitySimulator {
         const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
         
         if (isGitHubPages) {
-            // Use deployed backend URL - UPDATE THIS with your actual Render URL
+            // Try real backend first, fallback to mock if needed
             this.apiBase = 'https://inequality-simulator.onrender.com/api';
+            this.useMockBackend = false;
         } else if (isLocalhost) {
             // Local development on laptop
             this.apiBase = 'http://localhost:5000/api';
+            this.useMockBackend = false;
         } else {
             // Local network access (for mobile testing) - using your laptop's IP
             this.apiBase = 'http://192.168.50.4:5000/api';
+            this.useMockBackend = false;
+        }
+        
+        // Initialize mock backend if needed
+        if (this.useMockBackend) {
+            this.initializeMockBackend();
+            console.log('Using mock backend for GitHub Pages');
+            // Update UI to show mock backend status
+            setTimeout(() => {
+                const backendStatus = document.getElementById('backend-status');
+                if (backendStatus) {
+                    backendStatus.textContent = 'Mock (Browser-based)';
+                    backendStatus.style.color = '#ff9800'; // Orange color for mock
+                }
+            }, 100);
+        } else {
+            console.log('Using real backend at:', this.apiBase);
+            // Update UI to show real backend attempt
+            setTimeout(() => {
+                const backendStatus = document.getElementById('backend-status');
+                if (backendStatus) {
+                    backendStatus.textContent = 'Connecting...';
+                    backendStatus.style.color = '#2196f3'; // Blue for connecting
+                }
+            }, 100);
         }
         
         this.charts = {};
@@ -84,6 +111,11 @@ class InequalitySimulator {
     }
 
     async apiCall(endpoint, method = 'GET', data = null) {
+        // For GitHub Pages, try real backend first, then fallback to mock
+        if (this.useMockBackend) {
+            return await this.mockApiCall(endpoint, method, data);
+        }
+        
         try {
             const options = {
                 method: method,
@@ -104,11 +136,135 @@ class InequalitySimulator {
             
             return await response.json();
         } catch (error) {
+            // If on GitHub Pages and real API fails, fallback to mock
+            const hostname = window.location.hostname;
+            if (hostname.includes('github.io') && !this.useMockBackend) {
+                console.warn('Real backend failed, falling back to mock backend:', error.message);
+                this.useMockBackend = true;
+                this.initializeMockBackend();
+                // Update UI to show fallback status
+                const backendStatus = document.getElementById('backend-status');
+                if (backendStatus) {
+                    backendStatus.textContent = 'Mock (Fallback)';
+                    backendStatus.style.color = '#ff5722'; // Red-orange for fallback
+                }
+                return await this.mockApiCall(endpoint, method, data);
+            }
             this.showError(`API Error: ${error.message}`);
             throw error;
         }
     }
 
+    initializeMockBackend() {
+        // Initialize mock data storage
+        this.mockData = {
+            model: null,
+            step: 0,
+            giniHistory: [],
+            totalWealthHistory: [],
+            initialized: false
+        };
+    }
+
+    async mockApiCall(endpoint, method = 'GET', data = null) {
+        // Simulate API delay
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        switch (endpoint) {
+            case '/status':
+                return {
+                    initialized: this.mockData.initialized,
+                    policy: this.mockData.model?.policy || null,
+                    population: this.mockData.model?.population || null,
+                    step_count: this.mockData.step
+                };
+                
+            case '/initialize':
+                if (method === 'POST') {
+                    this.mockData.model = {
+                        policy: data.policy || 'econophysics',
+                        population: data.population || 200,
+                        start_up_required: data.start_up_required || 1
+                    };
+                    this.mockData.initialized = true;
+                    this.mockData.step = 0;
+                    this.mockData.giniHistory = [];
+                    this.mockData.totalWealthHistory = [];
+                    return { status: 'success', message: 'Model initialized' };
+                }
+                break;
+                
+            case '/step':
+                if (method === 'POST' && this.mockData.initialized) {
+                    this.mockData.step += 1;
+                    // Generate mock gini and total wealth data
+                    const gini = 0.3 + Math.random() * 0.4; // Random gini between 0.3-0.7
+                    const totalWealth = 1000 + this.mockData.step * 10 + Math.random() * 100;
+                    this.mockData.giniHistory.push(gini);
+                    this.mockData.totalWealthHistory.push(totalWealth);
+                    return { status: 'success' };
+                }
+                break;
+                
+            case '/run':
+                if (method === 'POST' && this.mockData.initialized) {
+                    const steps = data.steps || 50;
+                    for (let i = 0; i < steps; i++) {
+                        this.mockData.step += 1;
+                        const gini = 0.3 + Math.random() * 0.4;
+                        const totalWealth = 1000 + this.mockData.step * 10 + Math.random() * 100;
+                        this.mockData.giniHistory.push(gini);
+                        this.mockData.totalWealthHistory.push(totalWealth);
+                    }
+                    return { status: 'success', steps_run: steps };
+                }
+                break;
+                
+            case '/data/wealth-distribution':
+                if (this.mockData.initialized) {
+                    // Generate mock wealth distribution
+                    const population = this.mockData.model.population;
+                    const wealthData = [];
+                    for (let i = 0; i < population; i++) {
+                        // Generate wealth with power law distribution (realistic inequality)
+                        const wealth = Math.pow(Math.random(), 2) * 1000;
+                        wealthData.push(wealth);
+                    }
+                    return { current: wealthData };
+                }
+                break;
+                
+            case '/data/mobility':
+                if (this.mockData.initialized) {
+                    // Generate mock mobility data
+                    const population = this.mockData.model.population;
+                    const mobilityData = [];
+                    for (let i = 0; i < population; i++) {
+                        mobilityData.push({
+                            bracket: Math.floor(Math.random() * 5), // 0-4 brackets
+                            mobility: Math.random() * 2 - 1, // -1 to 1
+                            wealth: Math.pow(Math.random(), 2) * 1000
+                        });
+                    }
+                    return mobilityData;
+                }
+                break;
+                
+            case '/data/gini':
+                if (this.mockData.initialized) {
+                    return { current: this.mockData.giniHistory };
+                }
+                break;
+                
+            case '/data/total-wealth':
+                if (this.mockData.initialized) {
+                    return { current: this.mockData.totalWealthHistory };
+                }
+                break;
+        }
+        
+        throw new Error(`Mock API endpoint not implemented: ${endpoint}`);
+    }
     showError(message) {
         const errorDiv = document.getElementById('error-message');
         errorDiv.textContent = message;
@@ -124,6 +280,15 @@ class InequalitySimulator {
             document.getElementById('status-text').textContent = status.initialized ? 'Ready' : 'Not Initialized';
             document.getElementById('status-policy').textContent = status.policy || '-';
             document.getElementById('status-population').textContent = status.population || '-';
+            
+            // Update backend status to show successful connection
+            if (!this.useMockBackend) {
+                const backendStatus = document.getElementById('backend-status');
+                if (backendStatus) {
+                    backendStatus.textContent = 'Real API (Connected)';
+                    backendStatus.style.color = '#4caf50'; // Green for connected
+                }
+            }
             
             this.isInitialized = status.initialized;
             this.updateButtonStates();
