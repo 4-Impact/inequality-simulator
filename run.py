@@ -12,7 +12,7 @@ import threading
 
 def run_server():
     """Run the Flask backend server"""
-    from backend import app
+    from app import app
     print("Starting Inequality Simulator Backend...")
     print("Backend API will be available at: http://localhost:5000/api")
     print("Frontend will be available at: http://localhost:5000")
