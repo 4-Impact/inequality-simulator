@@ -116,4 +116,5 @@ To modify the frontend:
 - Edit `docs/app.js` for functionality changes
 - Edit `app.py` for API modifications
 
+
 The system is designed to be easily extensible with additional visualization types and model parameters.
