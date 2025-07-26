@@ -5,20 +5,28 @@ class InequalitySimulator {
     constructor() {
         // Dynamic API base URL detection
         const hostname = window.location.hostname;
+        const protocol = window.location.protocol;
         const isGitHubPages = hostname.includes('github.io');
         const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+        const isOnRender = hostname.includes('onrender.com');
         
         if (isGitHubPages) {
             // Try real backend first, fallback to mock if needed
             this.apiBase = 'https://inequality-simulator.onrender.com/api';
+            this.useMockBackend = false;
+        } else if (isOnRender) {
+            // When deployed on Render, use relative paths (same domain)
+            this.apiBase = '/api';
             this.useMockBackend = false;
         } else if (isLocalhost) {
             // Local development on laptop
             this.apiBase = 'http://localhost:5000/api';
             this.useMockBackend = false;
         } else {
-            // Local network access (for mobile testing) - using your laptop's IP
-            this.apiBase = 'http://192.168.50.4:5000/api';
+            // Local network access (for mobile testing)
+            // Use HTTPS if the page is served over HTTPS, otherwise HTTP
+            const apiProtocol = protocol === 'https:' ? 'https:' : 'http:';
+            this.apiBase = `${apiProtocol}//192.168.50.4:5000/api`;
             this.useMockBackend = false;
         }
         
