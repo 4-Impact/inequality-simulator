@@ -150,7 +150,6 @@ class InequalitySimulator {
                 }
                 return await this.mockApiCall(endpoint, method, data);
             }
-            
             this.showError(`API Error: ${error.message}`);
             throw error;
         }
@@ -266,7 +265,6 @@ class InequalitySimulator {
         
         throw new Error(`Mock API endpoint not implemented: ${endpoint}`);
     }
-
     showError(message) {
         const errorDiv = document.getElementById('error-message');
         errorDiv.textContent = message;
