@@ -4,7 +4,7 @@ This project has been converted from a Solara-based frontend to a custom HTML/Ja
 
 ## Architecture
 
-- **Backend**: Flask REST API (`backend.py`) that serves the model data
+- **Backend**: Flask REST API (`app.py`) that serves the model data
 - **Frontend**: Vanilla HTML/CSS/JavaScript (no React) in the `static/` folder
 - **Model**: Original Mesa-based inequality simulation model
 
@@ -72,7 +72,7 @@ The Flask backend provides the following REST API endpoints:
 
 ```
 py_cafe/
-├── backend.py              # Flask REST API server
+├── app.py                  # Flask REST API server
 ├── run.py                  # Main application runner
 ├── model.py                # Original Mesa model (Solara components removed)
 ├── utilities.py            # Helper functions
@@ -103,7 +103,7 @@ py_cafe/
 
 ## Troubleshooting
 
-- **Port 5000 in use**: Change the port in `backend.py` and `run.py`
+- **Port 5000 in use**: Change the port in `app.py` and `run.py`
 - **Charts not updating**: Check browser console for JavaScript errors
 - **Model not initializing**: Ensure all dependencies are installed correctly
 - **CORS errors**: The Flask-CORS extension should handle cross-origin requests
@@ -114,6 +114,7 @@ To modify the frontend:
 - Edit `docs/index.html` for landing page changes
 - Edit `docs/landing.html` for main interface layout changes
 - Edit `docs/app.js` for functionality changes
-- Edit `backend.py` for API modifications
+- Edit `app.py` for API modifications
+
 
 The system is designed to be easily extensible with additional visualization types and model parameters.
