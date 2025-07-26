@@ -10,6 +10,11 @@ import numpy as np
 from model import WealthModel, compute_gini, total_wealth
 import threading
 import time
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__, static_folder='docs', static_url_path='')
 
@@ -57,25 +62,37 @@ def static_files(filename):
 @app.route('/api/initialize', methods=['POST'])
 def initialize_model():
     """Initialize a new model with given parameters"""
-    global current_model
-    data = request.get_json()
-    policy = data.get('policy', 'econophysics')
-    population = data.get('population', 200)
-    start_up_required = data.get('start_up_required', 1)
-    
-    with model_lock:
-        current_model = WealthModel(
-            policy=policy,
-            population=population,
-            start_up_required=start_up_required,
-            seed=42
-        )
+    try:
+        global current_model
+        data = request.get_json()
         
-        # Set default comparison steps for comparison models
-        if policy == "comparison":
-            current_model.set_comparison_steps(50)  # Default, will be updated when run is called
-    
-    return jsonify({'status': 'success', 'message': 'Model initialized'})
+        if not data:
+            return jsonify({'error': 'No JSON data provided'}), 400
+            
+        policy = data.get('policy', 'econophysics')
+        population = data.get('population', 200)
+        start_up_required = data.get('start_up_required', 1)
+        
+        logger.info(f"Initializing model with policy={policy}, population={population}, start_up_required={start_up_required}")
+        
+        with model_lock:
+            current_model = WealthModel(
+                policy=policy,
+                population=population,
+                start_up_required=start_up_required,
+                seed=42
+            )
+            
+            # Set default comparison steps for comparison models
+            if policy == "comparison":
+                current_model.set_comparison_steps(50)  # Default, will be updated when run is called
+        
+        logger.info("Model initialized successfully")
+        return jsonify({'status': 'success', 'message': 'Model initialized'})
+        
+    except Exception as e:
+        logger.error(f"Error initializing model: {str(e)}")
+        return jsonify({'error': f'Failed to initialize model: {str(e)}'}), 500
 
 @app.route('/api/step', methods=['POST'])
 def step_model():
@@ -231,40 +248,43 @@ def get_status():
         }
         return json_response(status)
 
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Health check endpoint for Render"""
+    return jsonify({'status': 'healthy', 'message': 'API is running'})
+
+@app.route('/api', methods=['GET'])
+def api_info():
+    """API information endpoint"""
+    return jsonify({
+        'message': 'Inequality Simulator API',
+        'version': '1.0',
+        'endpoints': [
+            '/api/health',
+            '/api/status',
+            '/api/initialize',
+            '/api/step',
+            '/api/run',
+            '/api/data/wealth-distribution',
+            '/api/data/mobility',
+            '/api/data/gini',
+            '/api/data/total-wealth'
+        ]
+    })
+
 if __name__ == '__main__':
-    # Initialize with default model
-    current_model = WealthModel()
-    # Use environment port for production, fallback to 5000 for local
-    import os
-    port = int(os.environ.get('PORT', 5000))
-    app.run(debug=False, host='0.0.0.0', port=port)
-
-# -*- coding: utf-8 -*-
-"""
-Inequality Simulator - Updated for Custom Frontend
-
-This file is now deprecated. The Solara frontend has been replaced with a 
-custom HTML/JavaScript frontend and Flask backend.
-
-To run the new system, use:
-    python run.py
-
-Or manually start the backend:
-    python backend.py
-
-Then open your browser to http://localhost:5000
-"""
-
-print("=" * 60)
-print("NOTICE: This app has been converted to a custom frontend")
-print("=" * 60)
-print("The Solara-based interface has been replaced with:")
-print("- Flask REST API backend")
-print("- Custom HTML/CSS/JavaScript frontend (no React)")
-print("")
-print("To run the new system:")
-print("1. Install requirements: pip install -r requirements.txt")
-print("2. Run the application: python run.py")
-print("3. Open browser to: http://localhost:5000")
-print("=" * 60)
+    try:
+        # Initialize with default model
+        current_model = WealthModel()
+        logger.info("Default model initialized")
+        
+        # Use environment port for production, fallback to 5000 for local
+        import os
+        port = int(os.environ.get('PORT', 5000))
+        logger.info(f"Starting server on port {port}")
+        
+        app.run(debug=False, host='0.0.0.0', port=port)
+    except Exception as e:
+        logger.error(f"Failed to start server: {str(e)}")
+        raise
 
