@@ -44,6 +44,9 @@ class InequalitySimulator {
                     backendStatus.style.color = '#2196f3'; // Blue for connecting
                 }
             }, 100);
+            
+            // Test the backend connection immediately
+            this.testBackendConnection();
         }
         
         this.charts = {};
@@ -64,6 +67,45 @@ class InequalitySimulator {
         window.addEventListener('beforeunload', () => {
             this.stopContinuousRun();
         });
+    }
+    
+    async testBackendConnection() {
+        try {
+            console.log('Testing backend connection...');
+            const response = await fetch(`${this.apiBase}/status`, {
+                method: 'GET',
+                mode: 'cors',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                console.log('Backend connection successful:', data);
+                const backendStatus = document.getElementById('backend-status');
+                if (backendStatus) {
+                    backendStatus.textContent = 'Connected';
+                    backendStatus.style.color = '#4caf50'; // Green for connected
+                }
+            } else {
+                throw new Error(`Status check failed: ${response.status}`);
+            }
+        } catch (error) {
+            console.error('Backend connection test failed:', error);
+            const backendStatus = document.getElementById('backend-status');
+            if (backendStatus) {
+                backendStatus.textContent = 'Connection Failed';
+                backendStatus.style.color = '#f44336'; // Red for failed
+            }
+            
+            // If we're on GitHub Pages, enable fallback to mock
+            const hostname = window.location.hostname;
+            if (hostname.includes('github.io')) {
+                console.log('Enabling mock backend fallback...');
+                // Don't immediately switch to mock, let individual API calls handle the fallback
+            }
+        }
     }
     
     stopContinuousRun() {
@@ -117,25 +159,43 @@ class InequalitySimulator {
         }
         
         try {
+            console.log(`API Call: ${method} ${this.apiBase}${endpoint}`);
+            
             const options = {
                 method: method,
                 headers: {
                     'Content-Type': 'application/json',
-                }
+                },
+                mode: 'cors'  // Explicitly set CORS mode
             };
             
             if (data) {
                 options.body = JSON.stringify(data);
+                console.log('Request data:', data);
             }
 
             const response = await fetch(`${this.apiBase}${endpoint}`, options);
             
+            console.log(`Response status: ${response.status} ${response.statusText}`);
+            
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                const errorText = await response.text();
+                console.error('Response error text:', errorText);
+                throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
             }
             
-            return await response.json();
+            const result = await response.json();
+            console.log('Response data:', result);
+            return result;
         } catch (error) {
+            console.error('API call failed:', error);
+            console.error('Error details:', {
+                endpoint: endpoint,
+                method: method,
+                apiBase: this.apiBase,
+                error: error.message
+            });
+            
             // If on GitHub Pages and real API fails, fallback to mock
             const hostname = window.location.hostname;
             if (hostname.includes('github.io') && !this.useMockBackend) {
