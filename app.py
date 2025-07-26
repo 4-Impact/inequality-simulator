@@ -238,7 +238,7 @@ if __name__ == '__main__':
     import os
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
-=======
+
 # -*- coding: utf-8 -*-
 """
 Inequality Simulator - Updated for Custom Frontend
@@ -268,25 +268,3 @@ print("2. Run the application: python run.py")
 print("3. Open browser to: http://localhost:5000")
 print("=" * 60)
 
-# Legacy Solara code (commented out)
-"""
-from model import WealthModel
-from model import Histogram, Mobility, GiniPlot, TotalWealthPlot
-from mesa.visualization import SolaraViz,make_plot_component
-
-model = WealthModel()
-model_params = {
-    "policy": {
-        "type": "Select",
-        "value": "innovation",
-        "values": ["econophysics", "powerful leaders","equal wealth distribution", "innovation", "comparison"],
-        "text": "Select Policy"
-    }
-}
-
-Page = SolaraViz(
-    model, 
-    components=[Mobility, GiniPlot, TotalWealthPlot, Histogram],
-    model_params=model_params,
-)
-"""
