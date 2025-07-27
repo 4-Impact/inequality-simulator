@@ -69,8 +69,12 @@ def Mobility(model):
     rng = np.random.default_rng(seed=42)
     x  = rng.uniform(0, 50, size=len(agents))
     # --- 4. Scale mobility to point size --------------------------------------
-    # Square-root scaling keeps big numbers from dominating visually
-    sizes = 20 * np.sqrt(mobility + 1)  # add 1 so size≠0
+    # Bartholomew mobility ratio is between 0 and 1, so scale appropriately
+    # Multiply by 100 to make differences more visible, add minimum size
+    sizes = 10 + (mobility * 100)  # Base size 10, up to 110 for max mobility
+    
+    # Ensure no negative or zero sizes
+    sizes = np.maximum(sizes, 5)
 
     # --- 5. Plot ---------------------------------------------------------------
     fig = Figure()
@@ -82,7 +86,7 @@ def Mobility(model):
     ax.set_xticks([])                           # hide x ticks if they’re meaningless
     ax.set_yticks([0, 1, 2])
     ax.set_yticklabels(["Lower", "Middle", "Upper"])
-    ax.set_title("Agent Economic Class vs. Mobility")
+    ax.set_title("Agent Economic Class vs. Mobility (Bartholomew Ratio)")
 
     # Make a legend keyed to class, not size
     for cls, yc in class_to_y.items():
@@ -209,7 +213,8 @@ class WealthAgent(mesa.Agent):
         self.party_elite = party_elite
         self.bracket = "Middle"
         self.previous = "Middle"
-        self.mobility = 0
+        self.bracket_history = ["Middle"]  # Store bracket history for mobility calculation
+        self.mobility = 0  # Will now store Bartholomew mobility ratio
         self.W = proportion
         self.I = innovation
         self.ioriginal = innovation
@@ -219,6 +224,42 @@ class WealthAgent(mesa.Agent):
     def exchange(self): 
 
         return self.random.choice(self.model.agents)
+    
+    def calculate_bartholomew_mobility(self):
+        """
+        Calculate Bartholomew mobility ratio:
+        Expected absolute change in position divided by maximum possible change
+        """
+        if len(self.bracket_history) < 2:
+            return 0.0
+        
+        # Map brackets to numerical positions (0=Lower, 1=Middle, 2=Upper)
+        bracket_to_position = {"Lower": 0, "Middle": 1, "Upper": 2}
+        
+        positions = [bracket_to_position[bracket] for bracket in self.bracket_history]
+        
+        # Calculate absolute changes between consecutive time periods
+        absolute_changes = []
+        for i in range(1, len(positions)):
+            absolute_changes.append(abs(positions[i] - positions[i-1]))
+        
+        if not absolute_changes:
+            return 0.0
+            
+        # Expected absolute change (mean of absolute changes)
+        expected_absolute_change = sum(absolute_changes) / len(absolute_changes)
+        
+        # Maximum possible change (from lowest to highest position or vice versa)
+        max_possible_change = 2.0  # From Lower (0) to Upper (2) or vice versa
+        
+        # Bartholomew mobility ratio
+        if max_possible_change == 0:
+            return 0.0
+        
+        mobility_ratio = expected_absolute_change / max_possible_change
+        
+        # Ensure the ratio is between 0 and 1
+        return max(0.0, min(1.0, mobility_ratio))
     
     
     def step(self):
@@ -258,10 +299,15 @@ class WealthAgent(mesa.Agent):
         else: 
             self.bracket = "Middle"
 
-        if self.bracket == self.previous: 
-            self.mobility += 1
-        else:
-            self.mobility = 0
+        # Update bracket history and mobility calculation
+        self.bracket_history.append(self.bracket)
+        
+        # Keep only recent history to prevent memory bloat (last 20 steps)
+        if len(self.bracket_history) > 20:
+            self.bracket_history = self.bracket_history[-20:]
+        
+        # Calculate Bartholomew mobility ratio
+        self.mobility = self.calculate_bartholomew_mobility()
         """
                             INNOVATION
         """
@@ -364,7 +410,23 @@ class WealthModel(mesa.Model):
             party_elite=False
             if payday_array[idx] >=party_elite_cut: 
                 party_elite=True
-            WealthAgent(self, float(payday_array[idx]), float(innovation_array[idx]), party_elite)
+            agent = WealthAgent(self, float(payday_array[idx]), float(innovation_array[idx]), party_elite)
+            
+        # Initialize agent brackets based on their initial wealth
+        self.initialize_agent_brackets()
+    
+    def initialize_agent_brackets(self):
+        """Initialize agent brackets based on their starting wealth"""
+        self.brackets = calc_brackets(self)
+        for agent in self.agents:
+            if agent.wealth < self.brackets[0]:
+                agent.bracket = "Lower"
+            elif agent.wealth >= self.brackets[1]:
+                agent.bracket = "Upper"
+            else: 
+                agent.bracket = "Middle"
+            # Update bracket history with the initial bracket
+            agent.bracket_history = [agent.bracket]
     
     def initialize_comparison_models(self):
         """Initialize separate models for each policy"""

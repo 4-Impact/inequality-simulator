@@ -101,40 +101,11 @@ def step_model():
     if current_model is None:
         return jsonify({'error': 'Model not initialized'}), 400
     
-    data = request.get_json() or {}
-    steps_for_comparison = data.get('comparison_steps', 50)
-    
     with model_lock:
-        # For comparison models, only set steps if not already set or if different
-        if current_model.policy == "comparison":
-            if not hasattr(current_model, 'comparison_steps') or current_model.comparison_steps != steps_for_comparison:
-                current_model.set_comparison_steps(steps_for_comparison)
-        
         current_model.step()
         current_model.datacollector.collect(current_model)
     
     return jsonify({'status': 'success'})
-
-@app.route('/api/run', methods=['POST'])
-def run_model():
-    """Run the model for specified number of steps"""
-    global current_model
-    if current_model is None:
-        return jsonify({'error': 'Model not initialized'}), 400
-    
-    data = request.get_json()
-    steps = data.get('steps', 50)
-    
-    with model_lock:
-        # Set comparison steps if this is for comparison mode
-        if current_model.policy == "comparison":
-            current_model.set_comparison_steps(steps)
-        
-        for _ in range(steps):
-            current_model.step()
-            current_model.datacollector.collect(current_model)
-    
-    return jsonify({'status': 'success', 'steps_run': steps})
 
 @app.route('/api/data/wealth-distribution', methods=['GET'])
 def get_wealth_distribution():
@@ -165,22 +136,37 @@ def get_mobility_data():
         return jsonify({'error': 'Model not initialized'}), 400
     
     with model_lock:
-        # For comparison mode, use data from the econophysics model as representative
+        # For comparison mode, return data from all policy models
         if current_model.policy == "comparison" and hasattr(current_model, 'comparison_models') and current_model.comparison_models:
-            # Use the econophysics model for mobility visualization
-            model_to_use = current_model.comparison_models.get('econophysics', current_model)
-        else:
-            model_to_use = current_model
+            comparison_data = {}
+            policies = ["econophysics", "powerful leaders", "equal wealth distribution", "innovation"]
             
-        agents_data = []
-        for agent in model_to_use.agents:
-            agents_data.append({
-                'bracket': agent.bracket,
-                'mobility': agent.mobility,
-                'wealth': agent.wealth
-            })
-        
-        return json_response(agents_data)
+            for policy in policies:
+                if policy in current_model.comparison_models:
+                    model = current_model.comparison_models[policy]
+                    agents_data = []
+                    for agent in model.agents:
+                        agents_data.append({
+                            'bracket': agent.bracket,
+                            'mobility': agent.mobility,
+                            'wealth': agent.wealth,
+                            'policy': policy  # Add policy identifier
+                        })
+                    comparison_data[policy] = agents_data
+            
+            return json_response(comparison_data)
+        else:
+            # Single policy mode
+            agents_data = []
+            for agent in current_model.agents:
+                agents_data.append({
+                    'bracket': agent.bracket,
+                    'mobility': agent.mobility,
+                    'wealth': agent.wealth,
+                    'policy': current_model.policy  # Add policy identifier
+                })
+            
+            return json_response(agents_data)
 
 @app.route('/api/data/gini', methods=['GET'])
 def get_gini_data():
@@ -264,7 +250,6 @@ def api_info():
             '/api/status',
             '/api/initialize',
             '/api/step',
-            '/api/run',
             '/api/data/wealth-distribution',
             '/api/data/mobility',
             '/api/data/gini',
