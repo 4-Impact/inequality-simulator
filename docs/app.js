@@ -274,20 +274,6 @@ class InequalitySimulator {
                 }
                 break;
                 
-            case '/run':
-                if (method === 'POST' && this.mockData.initialized) {
-                    const steps = data.steps || 50;
-                    for (let i = 0; i < steps; i++) {
-                        this.mockData.step += 1;
-                        const gini = 0.3 + Math.random() * 0.4;
-                        const totalWealth = 1000 + this.mockData.step * 10 + Math.random() * 100;
-                        this.mockData.giniHistory.push(gini);
-                        this.mockData.totalWealthHistory.push(totalWealth);
-                    }
-                    return { status: 'success', steps_run: steps };
-                }
-                break;
-                
             case '/data/wealth-distribution':
                 if (this.mockData.initialized) {
                     // Generate mock wealth distribution
@@ -304,17 +290,41 @@ class InequalitySimulator {
                 
             case '/data/mobility':
                 if (this.mockData.initialized) {
-                    // Generate mock mobility data
                     const population = this.mockData.model.population;
-                    const mobilityData = [];
-                    for (let i = 0; i < population; i++) {
-                        mobilityData.push({
-                            bracket: Math.floor(Math.random() * 5), // 0-4 brackets
-                            mobility: Math.random() * 2 - 1, // -1 to 1
-                            wealth: Math.pow(Math.random(), 2) * 1000
+                    const classes = ['Lower', 'Middle', 'Upper'];
+                    
+                    if (this.mockData.model.policy === 'comparison') {
+                        // Return comparison data structure
+                        const policies = ['econophysics', 'powerful leaders', 'equal wealth distribution', 'innovation'];
+                        const comparisonData = {};
+                        
+                        policies.forEach(policy => {
+                            const policyData = [];
+                            for (let i = 0; i < Math.floor(population / policies.length); i++) {
+                                policyData.push({
+                                    bracket: classes[Math.floor(Math.random() * 3)],
+                                    mobility: Math.random(), // 0 to 1 for Bartholomew ratio
+                                    wealth: Math.pow(Math.random(), 2) * 1000,
+                                    policy: policy
+                                });
+                            }
+                            comparisonData[policy] = policyData;
                         });
+                        
+                        return comparisonData;
+                    } else {
+                        // Single policy data structure
+                        const mobilityData = [];
+                        for (let i = 0; i < population; i++) {
+                            mobilityData.push({
+                                bracket: classes[Math.floor(Math.random() * 3)],
+                                mobility: Math.random(), // 0 to 1 for Bartholomew ratio
+                                wealth: Math.pow(Math.random(), 2) * 1000,
+                                policy: this.mockData.model.policy
+                            });
+                        }
+                        return mobilityData;
                     }
-                    return mobilityData;
                 }
                 break;
                 
@@ -367,17 +377,13 @@ class InequalitySimulator {
 
     updateButtonStates() {
         const stepBtn = document.getElementById('step-btn');
-        const runBtn = document.getElementById('run-btn');
         const continuousRunBtn = document.getElementById('continuous-run-btn');
         const stopBtn = document.getElementById('stop-btn');
-        const refreshBtn = document.getElementById('refresh-btn');
         
         const canRun = this.isInitialized && !this.isRunning && !this.isContinuousRunning;
         
         stepBtn.disabled = !canRun;
-        runBtn.disabled = !canRun;
         continuousRunBtn.disabled = !canRun;
-        refreshBtn.disabled = !this.isInitialized || this.isRunning;
         
         // Show/hide stop button
         if (this.isContinuousRunning) {
@@ -392,10 +398,10 @@ class InequalitySimulator {
 
     initializeCharts() {
         // Initialize all charts with empty data
-        this.charts.wealth = this.createHistogramChart('wealth-chart', 'Wealth Distribution');
-        this.charts.mobility = this.createScatterChart('mobility-chart', 'Economic Mobility');
-        this.charts.gini = this.createLineChart('gini-chart', 'Gini Coefficient');
-        this.charts.totalWealth = this.createLineChart('total-wealth-chart', 'Total Wealth');
+        this.charts.wealth = this.createHistogramChart('wealth-chart');
+        this.charts.mobility = this.createScatterChart('mobility-chart');
+        this.charts.gini = this.createLineChart('gini-chart');
+        this.charts.totalWealth = this.createLineChart('total-wealth-chart');
     }
 
     createHistogramChart(canvasId, title) {
@@ -421,7 +427,11 @@ class InequalitySimulator {
                 },
                 scales: {
                     x: {
-                        ticks: { color: '#e0e0e0' },
+                        ticks: { 
+                            color: '#e0e0e0',
+                            maxRotation: 45,
+                            minRotation: 45
+                        },
                         grid: { color: 'rgba(224, 224, 224, 0.1)' }
                     },
                     y: {
@@ -530,11 +540,11 @@ class InequalitySimulator {
         const labels = [];
         const counts = new Array(bins).fill(0);
         
-        // Create bin labels
+        // Create bin labels with exponential notation
         for (let i = 0; i < bins; i++) {
             const start = min + (i * binWidth);
             const end = start + binWidth;
-            labels.push(`${start.toFixed(1)}-${end.toFixed(1)}`);
+            labels.push(`${start.toExponential(1)}-${end.toExponential(1)}`);
         }
         
         // Count data points in each bin
@@ -581,12 +591,12 @@ class InequalitySimulator {
                     const bins = 15;
                     const binWidth = (max - min) / bins;
                     
-                    // Create consistent bin labels
+                    // Create consistent bin labels with exponential notation
                     const labels = [];
                     for (let i = 0; i < bins; i++) {
                         const start = min + (i * binWidth);
                         const end = start + binWidth;
-                        labels.push(`${start.toFixed(1)}-${end.toFixed(1)}`);
+                        labels.push(`${start.toExponential(1)}-${end.toExponential(1)}`);
                     }
                     
                     // Create datasets for each policy using the same bins
@@ -629,47 +639,113 @@ class InequalitySimulator {
         try {
             const data = await this.apiCall('/data/mobility');
             
-            const classToY = { 'Lower': 0, 'Middle': 1, 'Upper': 2 };
-            const classToColor = { 
-                'Lower': 'rgba(255, 99, 132, 0.7)', 
-                'Middle': 'rgba(54, 162, 235, 0.7)', 
-                'Upper': 'rgba(75, 192, 192, 0.7)' 
-            };
+            // Check if this is comparison mode (data is an object with policy keys)
+            const isComparisonMode = data && typeof data === 'object' && !Array.isArray(data) && 
+                                    Object.keys(data).some(key => ['econophysics', 'powerful leaders', 'equal wealth distribution', 'innovation'].includes(key));
             
-            const datasets = {};
-            const totalAgents = data.length;
-            
-            data.forEach((agent, index) => {
-                const className = agent.bracket;
-                const agentId = index; // Use array index as agent ID
+            if (isComparisonMode) {
+                // Comparison mode: color by policy
+                const policyColors = {
+                    'econophysics': 'rgba(54, 162, 235, 0.7)',           // Blue
+                    'powerful leaders': 'rgba(255, 99, 132, 0.7)',      // Red
+                    'equal wealth distribution': 'rgba(75, 192, 192, 0.7)', // Teal
+                    'innovation': 'rgba(255, 159, 64, 0.7)'             // Orange
+                };
                 
-                // Assign fixed x position if not already assigned
-                if (!(agentId in this.agentPositions)) {
-                    // Spread agents evenly across the x-axis
-                    this.agentPositions[agentId] = (index / totalAgents) * 50;
-                }
+                const classToY = { 'Lower': 0, 'Middle': 1, 'Upper': 2 };
+                const datasets = {};
+                let totalAgents = 0;
                 
-                if (!datasets[className]) {
-                    datasets[className] = {
-                        label: className,
-                        data: [],
-                        backgroundColor: classToColor[className],
-                        borderColor: classToColor[className].replace('0.7', '1'),
-                        pointRadius: []
-                    };
-                }
-                
-                datasets[className].data.push({
-                    x: this.agentPositions[agentId], // Use fixed x position
-                    y: classToY[className]
+                // Count total agents for position calculation
+                Object.values(data).forEach(policyData => {
+                    totalAgents += policyData.length;
                 });
                 
-                // Size based on mobility (sqrt scaling)
-                const size = 5 + Math.sqrt(agent.mobility + 1) * 2;
-                datasets[className].pointRadius.push(size);
-            });
+                let agentIndex = 0;
+                
+                // Process each policy's data
+                Object.keys(data).forEach(policy => {
+                    const policyData = data[policy];
+                    
+                    if (!datasets[policy]) {
+                        datasets[policy] = {
+                            label: policy,
+                            data: [],
+                            backgroundColor: policyColors[policy] || 'rgba(128, 128, 128, 0.7)',
+                            borderColor: (policyColors[policy] || 'rgba(128, 128, 128, 0.7)').replace('0.7', '1'),
+                            pointRadius: []
+                        };
+                    }
+                    
+                    policyData.forEach((agent) => {
+                        const agentId = agentIndex; // Use global agent index
+                        
+                        // Assign fixed x position if not already assigned
+                        if (!(agentId in this.agentPositions)) {
+                            // Spread agents evenly across the x-axis
+                            this.agentPositions[agentId] = (agentIndex / totalAgents) * 50;
+                        }
+                        
+                        datasets[policy].data.push({
+                            x: this.agentPositions[agentId],
+                            y: classToY[agent.bracket]
+                        });
+                        
+                        // Size based on Bartholomew mobility ratio (0 to 1)
+                        const size = 5 + (agent.mobility * 15); // Size from 5 to 20
+                        datasets[policy].pointRadius.push(size);
+                        
+                        agentIndex++;
+                    });
+                });
+                
+                this.charts.mobility.data.datasets = Object.values(datasets);
+            } else {
+                // Single policy mode: color by class (original behavior)
+                const classToY = { 'Lower': 0, 'Middle': 1, 'Upper': 2 };
+                const classToColor = { 
+                    'Lower': 'rgba(255, 99, 132, 0.7)', 
+                    'Middle': 'rgba(54, 162, 235, 0.7)', 
+                    'Upper': 'rgba(75, 192, 192, 0.7)' 
+                };
+                
+                const datasets = {};
+                const totalAgents = data.length;
+                
+                data.forEach((agent, index) => {
+                    const className = agent.bracket;
+                    const agentId = index; // Use array index as agent ID
+                    
+                    // Assign fixed x position if not already assigned
+                    if (!(agentId in this.agentPositions)) {
+                        // Spread agents evenly across the x-axis
+                        this.agentPositions[agentId] = (index / totalAgents) * 50;
+                    }
+                    
+                    if (!datasets[className]) {
+                        datasets[className] = {
+                            label: className,
+                            data: [],
+                            backgroundColor: classToColor[className],
+                            borderColor: classToColor[className].replace('0.7', '1'),
+                            pointRadius: []
+                        };
+                    }
+                    
+                    datasets[className].data.push({
+                        x: this.agentPositions[agentId], // Use fixed x position
+                        y: classToY[className]
+                    });
+                    
+                    // Size based on Bartholomew mobility ratio (0 to 1)
+                    // Scale to make differences more visible
+                    const size = 5 + (agent.mobility * 15); // Size from 5 to 20
+                    datasets[className].pointRadius.push(size);
+                });
+                
+                this.charts.mobility.data.datasets = Object.values(datasets);
+            }
             
-            this.charts.mobility.data.datasets = Object.values(datasets);
             this.charts.mobility.update('none'); // Faster update mode
         } catch (error) {
             console.error('Error updating mobility chart:', error);
@@ -883,8 +959,7 @@ async function stepModel() {
     simulator.updateButtonStates();
     
     try {
-        const steps = parseInt(document.getElementById('steps-input').value) || 50;
-        await simulator.apiCall('/step', 'POST', { comparison_steps: steps });
+        await simulator.apiCall('/step', 'POST', {});
         simulator.stepCount++; // Increment step counter
         await simulator.refreshCharts(true); // Use incremental updates
     } catch (error) {
@@ -892,29 +967,6 @@ async function stepModel() {
     } finally {
         simulator.isRunning = false;
         simulator.updateButtonStates();
-    }
-}
-
-async function runModel() {
-    if (!simulator.isInitialized) return;
-    
-    simulator.isRunning = true;
-    simulator.updateButtonStates();
-    
-    const runBtn = document.getElementById('run-btn');
-    const originalText = runBtn.textContent;
-    const steps = parseInt(document.getElementById('steps-input').value) || 50;
-    runBtn.textContent = `Running ${steps} steps...`;
-    
-    try {
-        await simulator.apiCall('/run', 'POST', { steps: steps });
-        await simulator.refreshCharts();
-    } catch (error) {
-        console.error('Error running model:', error);
-    } finally {
-        simulator.isRunning = false;
-        simulator.updateButtonStates();
-        runBtn.textContent = originalText;
     }
 }
 
@@ -934,8 +986,7 @@ async function startContinuousRun() {
         }
         
         try {
-            const steps = parseInt(document.getElementById('steps-input').value) || 50;
-            await simulator.apiCall('/step', 'POST', { comparison_steps: steps });
+            await simulator.apiCall('/step', 'POST', {});
             simulator.stepCount++; // Increment step counter
             await simulator.refreshCharts(true); // Use incremental updates
         } catch (error) {
@@ -948,9 +999,4 @@ async function startContinuousRun() {
 async function stopContinuousRun() {
     simulator.stopContinuousRun();
     document.getElementById('status-text').textContent = 'Ready';
-}
-
-async function refreshCharts() {
-    if (!simulator.isInitialized) return;
-    await simulator.refreshCharts();
 }
