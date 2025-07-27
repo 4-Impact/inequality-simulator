@@ -359,17 +359,12 @@
                 </div>
 
                 <div class="control-group">
-                    <label for="startup-select">Startup Required:</label>
+                    <label for="startup-select">Startup Capital (Innovation Policy):</label>
                     <select id="startup-select">
                         <option value="1" selected>Low</option>
                         <option value="2">Medium</option>
                         <option value="3">High</option>
                     </select>
-                </div>
-
-                <div class="control-group">
-                    <label for="steps-input">Steps to Run:</label>
-                    <input type="number" id="steps-input" value="50" min="1" max="1000">
                 </div>
             </div>
 
@@ -385,20 +380,12 @@
                     Single Step
                 </button>
                 
-                <button id="run-btn" class="btn-success" onclick="runModel()" disabled>
-                    Run Steps
-                </button>
-                
                 <button id="continuous-run-btn" class="btn-warning" onclick="startContinuousRun()" disabled>
                     Start Continuous
                 </button>
                 
                 <button id="stop-btn" class="btn-danger" onclick="stopContinuousRun()" disabled style="display: none;">
                     Stop Continuous
-                </button>
-                
-                <button id="refresh-btn" class="btn-primary" onclick="refreshCharts()" disabled>
-                    Refresh Charts
                 </button>
             </div>
         </div>
@@ -425,7 +412,7 @@
             </div>
 
             <div class="chart-container">
-                <div class="chart-title">Economic Mobility</div>
+                <div class="chart-title">Economic Mobility (Bartholomew Ratio)</div>
                 <canvas id="mobility-chart"></canvas>
             </div>
         </div>
