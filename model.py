@@ -368,7 +368,7 @@ class WealthModel(mesa.Model):
         self.policy = policy
         self.population = population
         self.party_elite = None
-        self.total = 200
+        self.total = population
         self.survival_cost = 0
         self.each_wealth = 0
         self.brackets = [0.75,1.25]
@@ -389,11 +389,11 @@ class WealthModel(mesa.Model):
         sigma = 0.05     # original sigma, so variance is 2*sigma^2
         variance = 2 * sigma**2
 
-        # Generate 200 data points from the Gaussian distribution
+        # Generate data points from the Gaussian distribution
         payday_array = np.random.normal(mean, np.sqrt(variance), self.population)
         
         
-        innovation_array =  np.random.pareto(2.5,size=200)
+        innovation_array =  np.random.pareto(2.5,size=self.population)
         '''
         innovation_array = np.random.normal(loc=1,
                                           scale=0.1,
