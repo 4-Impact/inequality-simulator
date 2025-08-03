@@ -4,7 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inequality Simulator</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <script>
+      // Chart.js is now loaded, we'll handle Sankey differently in the app.js
+      console.log('Chart.js loaded:', !!window.Chart);
+    </script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -268,6 +272,118 @@
             border: 1px solid #f44336;
         }
         
+        /* Info Button Styles */
+        .info-button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-left: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            vertical-align: middle;
+        }
+        
+        .info-button:hover {
+            background-color: #2980b9;
+            transform: scale(1.1);
+        }
+        
+        .chart-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 15px;
+        }
+        
+        .parameter-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.7);
+        }
+        
+        .modal-content {
+            background-color: #2d2d2d;
+            margin: 10% auto;
+            padding: 25px;
+            border: 1px solid #404040;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 600px;
+            color: #e0e0e0;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #404040;
+            padding-bottom: 15px;
+        }
+        
+        .modal-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #3498db;
+            margin: 0;
+        }
+        
+        .close-button {
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: #bdc3c7;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: all 0.3s;
+        }
+        
+        .close-button:hover {
+            background-color: #404040;
+            color: #e0e0e0;
+        }
+        
+        .modal-body {
+            line-height: 1.6;
+            font-size: 14px;
+        }
+        
+        .modal-body p {
+            margin-bottom: 15px;
+        }
+        
+        .modal-body strong {
+            color: #3498db;
+        }
+        
         /* Responsive Design */
         @media (max-width: 768px) {
             .sidebar {
@@ -343,7 +459,10 @@
                 <div class="section-title">Model Configuration</div>
                 
                 <div class="control-group">
-                    <label for="policy-select">Policy:</label>
+                    <div class="parameter-header">
+                        <label for="policy-select">Policy:</label>
+                        <button class="info-button" onclick="showInfoModal('policy')">?</button>
+                    </div>
                     <select id="policy-select">
                         <option value="econophysics">Econophysics</option>
                         <option value="powerful leaders">Powerful Leaders</option>
@@ -354,12 +473,18 @@
                 </div>
 
                 <div class="control-group">
-                    <label for="population-input">Population:</label>
+                    <div class="parameter-header">
+                        <label for="population-input">Population:</label>
+                        <button class="info-button" onclick="showInfoModal('population')">?</button>
+                    </div>
                     <input type="number" id="population-input" value="200" min="50" max="1000">
                 </div>
 
                 <div class="control-group">
-                    <label for="startup-select">Startup Capital (Innovation Policy):</label>
+                    <div class="parameter-header">
+                        <label for="startup-select">Startup Capital (Innovation Policy):</label>
+                        <button class="info-button" onclick="showInfoModal('startup')">?</button>
+                    </div>
                     <select id="startup-select">
                         <option value="1" selected>Low</option>
                         <option value="2">Medium</option>
@@ -397,28 +522,179 @@
 
         <div class="charts-grid">
             <div class="chart-container">
-                <div class="chart-title">Total Wealth Over Time</div>
+                <div class="chart-header">
+                    <div class="chart-title">Total Wealth Over Time</div>
+                    <button class="info-button" onclick="showInfoModal('totalWealth')">?</button>
+                </div>
                 <canvas id="total-wealth-chart"></canvas>
             </div>
 
             <div class="chart-container">
-                <div class="chart-title">Gini Coefficient Over Time</div>
+                <div class="chart-header">
+                    <div class="chart-title">Gini Coefficient Over Time</div>
+                    <button class="info-button" onclick="showInfoModal('gini')">?</button>
+                </div>
                 <canvas id="gini-chart"></canvas>
             </div>
 
             <div class="chart-container">
-                <div class="chart-title">Wealth Distribution</div>
+                <div class="chart-header">
+                    <div class="chart-title">Wealth Distribution</div>
+                    <button class="info-button" onclick="showInfoModal('wealthDistribution')">?</button>
+                </div>
                 <canvas id="wealth-chart"></canvas>
             </div>
 
             <div class="chart-container">
-                <div class="chart-title">Economic Mobility (Bartholomew Ratio)</div>
+                <div class="chart-header">
+                    <div class="chart-title">Economic Mobility</div>
+                    <button class="info-button" onclick="showInfoModal('mobility')">?</button>
+                </div>
                 <canvas id="mobility-chart"></canvas>
             </div>
         </div>
     </div>
 
+    <!-- Info Modal -->
+    <div id="info-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modal-title">Information</h2>
+                <button class="close-button" onclick="closeInfoModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <!-- Content will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
     <script>
+        // Information content for each element
+        const infoContent = {
+            policy: {
+                title: "Economic Policy Models",
+                content: `
+                    <p><strong>Econophysics:</strong> Models wealth distribution using principles from statistical physics. Agents exchange wealth randomly, leading to naturally occurring inequality patterns similar to the Boltzmann distribution in thermodynamics.</p>
+                    
+                    <p><strong>Powerful Leaders:</strong> Implements a system where certain agents (elites) implement policies that allow them to retain their wealth and not compete fairly.</p>
+                    
+                    <p><strong>Equal Wealth Distribution:</strong> Attempts to maintain wealth equality through redistribution mechanisms, forces a constant redistribution of wealth at each step.</p>
+                    
+                    <p><strong>Innovation:</strong> Rewards agents for innovation and entrepreneurship, allowing some agents to generate wealth through new ideas and risk-taking, representing market-based economies with innovation incentives.</p>
+                    
+                    <p><strong>Comparison:</strong> Runs all four policies simultaneously to compare their effects on wealth distribution and inequality over time.</p>
+                `
+            },
+            population: {
+                title: "Population Size",
+                content: `
+                    <p>The total number of agents (individuals) in the economic simulation. Each agent represents an economic actor with wealth that can change over time through various interactions.</p>
+                    
+                    <p><strong>Effects of Population Size:</strong></p>
+                    <p>• <strong>Smaller populations (50-100):</strong> More volatile results, individual actions have larger impacts, easier to observe specific agent behaviors.</p>
+                    <p>• <strong>Medium populations (200-500):</strong> Good balance between computational efficiency and statistical significance, recommended for most analyses.</p>
+                    <p>• <strong>Larger populations (500-1000):</strong> More stable statistical patterns, smoother curves, but slower simulation speed.</p>
+                    
+                    <p>The population size affects the stability of inequality measures and the time needed for the system to reach equilibrium.</p>
+                `
+            },
+            startup: {
+                title: "Startup Capital (Innovation Policy)",
+                content: `
+                    <p>Determines the initial capital requirement for agents to engage in innovative activities when using the Innovation policy. This parameter only affects the Innovation policy model.</p>
+                    
+                    <p><strong>Low Startup Capital:</strong> More agents can afford to innovate, leading to distributed innovation but potentially lower individual rewards.</p>
+                    
+                    <p><strong>Medium Startup Capital:</strong> Moderate barrier to entry, creating a balance between accessibility and reward concentration.</p>
+                    
+                    <p><strong>High Startup Capital:</strong> Only wealthy agents can innovate, potentially increasing inequality but also creating higher innovation rewards for those who can participate.</p>
+                    
+                    <p>This parameter explores how capital requirements for entrepreneurship affect wealth distribution and economic mobility in innovation-driven economies.</p>
+                `
+            },
+            totalWealth: {
+                title: "Total Wealth Over Time",
+                content: `
+                    <p>This chart tracks the aggregate wealth of all agents in the system over time, showing how different economic policies affect overall wealth creation or destruction.</p>
+                    
+                    <p><strong>Key Insights:</strong></p>
+                    <p>• <strong>Upward trends:</strong> Policies generate new wealth over time </p>
+                    <p>• <strong>Flat trends:</strong>  Policies keep amount of wealth stagnant</p>
+                    <p>• <strong>Downward trends:</strong> Policies reduce the amount of overall wealth</p>
+                    
+                    <p>In comparison mode, this chart shows how different policies perform in terms of overall economic growth, helping identify which approaches are most effective at increasing societal wealth.</p>
+                    
+                `
+            },
+            gini: {
+                title: "Gini Coefficient Over Time",
+                content: `
+                    <p>The Gini coefficient is a measure of income or wealth inequality within a population, ranging from 0 (perfect equality- every person has the exact same amount of wealth) to 1 (maximum inequality- one person has all the wealth).</p>
+                    
+                    <p>This metric helps evaluate the trade-offs between economic growth and equality under different policy regimes.</p>
+                `
+            },
+            wealthDistribution: {
+                title: "Wealth Distribution",
+                content: `
+                    <p>This histogram shows how wealth is distributed across all agents at the current point in time, revealing the shape of inequality in the simulated economy.</p>
+                    
+                    <p>In comparison mode, you can see how different policies create entirely different distribution shapes.</p>
+                `
+            },
+            mobility: {
+                title: "Economic Mobility - Class Transition Flows",
+                content: `
+                    <p>This chart visualizes economic mobility by showing the flow of people between economic classes over time. It displays class transitions as curved arrows connecting "Previous" and "Current" class positions.</p>
+                    
+                    <p><strong>Chart Elements:</strong></p>
+                    <p>• <strong>Class Boxes:</strong> Three economic classes (Lower, Middle, Upper) shown for both previous and current time periods</p>
+                    <p>• <strong>Flow Arrows:</strong> Curved lines showing movement between classes, with thickness indicating the number of people transitioning</p>
+                    <p>• <strong>Arrow Colors:</strong> Green for upward mobility, Red for downward mobility, Blue for staying in the same class</p>
+                    <p>• <strong>Numbers:</strong> Count of people making each transition</p>
+                    
+                    <p><strong>Flow Interpretation:</strong></p>
+                    <p>• <strong>Thick arrows:</strong> Large numbers of people moving between classes</p>
+                    <p>• <strong>Thin arrows:</strong> Few people making transitions</p>
+                    <p>• <strong>Self-loops (blue):</strong> People remaining in their current class</p>
+                    <p>• <strong>Upward flows (green):</strong> Economic advancement from lower to higher classes</p>
+                    <p>• <strong>Downward flows (red):</strong> Economic decline from higher to lower classes</p>
+                    
+                    <p><strong>Policy Analysis:</strong></p>
+                    <p>• Strong upward flows indicate policies that promote social mobility</p>
+                    <p>• Large self-loops suggest economic stability within classes</p>
+                    <p>• Significant downward flows may indicate economic instability or policy failures</p>
+                    
+                    <p>This visualization helps assess how economic policies affect class mobility and social advancement opportunities.</p>
+                `
+            }
+        };
+
+        // Modal functions
+        function showInfoModal(type) {
+            const modal = document.getElementById('info-modal');
+            const title = document.getElementById('modal-title');
+            const body = document.getElementById('modal-body');
+            
+            if (infoContent[type]) {
+                title.textContent = infoContent[type].title;
+                body.innerHTML = infoContent[type].content;
+                modal.style.display = 'block';
+            }
+        }
+
+        function closeInfoModal() {
+            document.getElementById('info-modal').style.display = 'none';
+        }
+
+        // Close modal when clicking outside of it
+        window.onclick = function(event) {
+            const modal = document.getElementById('info-modal');
+            if (event.target === modal) {
+                closeInfoModal();
+            }
+        }
+
         // Sidebar toggle functionality
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
