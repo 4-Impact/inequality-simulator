@@ -1,9 +1,6 @@
 import mesa
 import numpy as np
 from scipy.stats import expon
-from mesa.visualization.utils import update_counter
-from mesa.visualization import SolaraViz, make_plot_component
-import solara 
 from matplotlib.figure import Figure
 import matplotlib.patches as mpatches
 import time
@@ -14,8 +11,7 @@ from utilities import calculate_churn, number_to_words, calc_brackets
                                #Visuals
 
 ###############################################################################################
-
-@solara.component
+"""
 def Histogram(model):
     update_counter.get() # This is required to update the counter
     # Note: you must initialize a figure using this method instead of
@@ -47,7 +43,6 @@ def Histogram(model):
     
     solara.FigureMatplotlib(fig)
 
-@solara.component
 def Mobility(model): 
     update_counter.get()
 
@@ -111,12 +106,7 @@ def Churn(model):
     
     solara.FigureMatplotlib(fig)
 '''
-def compute_gini(model):
-    agent_wealths = [abs(float(agent.wealth)) for agent in model.agents]
-    x = sorted(agent_wealths)
-    N = model.population
-    B = sum(xi * (N - i) for i, xi in enumerate(x)) / (N * sum(x))
-    return 1 + (1 / N) - 2 * B
+
 '''
 @solara.component
 def Wealth(model): 
@@ -131,13 +121,10 @@ def Wealth(model):
     ax.text(0.5,0.5,f"{words}", 
              va='center', ha='left', color="black", fontsize=20)
     solara.FigureMatplotlib(fig)
-'''
-def total_wealth(model): 
-    return sum([agent.wealth for agent in model.agents])
 
-@solara.component
+
 def GiniPlot(model):
-    """Custom Gini plot that shows comparison data when in comparison mode"""
+    '''Custom Gini plot that shows comparison data when in comparison mode'''
     update_counter.get()
     fig = Figure()
     ax = fig.subplots()
@@ -166,9 +153,9 @@ def GiniPlot(model):
     
     solara.FigureMatplotlib(fig)
 
-@solara.component  
+
 def TotalWealthPlot(model):
-    """Custom Total Wealth plot that shows comparison data when in comparison mode"""
+    '''Custom Total Wealth plot that shows comparison data when in comparison mode'''
     update_counter.get()
     fig = Figure()
     ax = fig.subplots()
@@ -196,6 +183,18 @@ def TotalWealthPlot(model):
         ax.axis('off')
     
     solara.FigureMatplotlib(fig)
+"""
+
+def compute_gini(model):
+    agent_wealths = [abs(float(agent.wealth)) for agent in model.agents]
+    x = sorted(agent_wealths)
+    N = model.population
+    B = sum(xi * (N - i) for i, xi in enumerate(x)) / (N * sum(x))
+    return 1 + (1 / N) - 2 * B
+
+def total_wealth(model): 
+    return sum([agent.wealth for agent in model.agents])
+
 
 #######################################################################################################
 

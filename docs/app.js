@@ -64,6 +64,7 @@ class InequalitySimulator {
         this.continuousRunInterval = null;
         this.stepCount = 0; // Track current step for incremental updates
         this.agentPositions = {}; // Store fixed x positions for agents
+        this.previousClassCounts = null; // Store previous class distribution for flow calculation
         
         this.initializeCharts();
         this.updateStatus();
@@ -129,6 +130,7 @@ class InequalitySimulator {
         // Clear all chart data
         this.stepCount = 0;
         this.agentPositions = {}; // Reset agent positions
+        this.previousClassCounts = null; // Reset previous class counts for flow calculation
         
         // Reset line charts (Gini and Total Wealth)
         this.charts.gini.data.labels = [];
@@ -416,7 +418,7 @@ class InequalitySimulator {
                 responsive: true,
                 plugins: {
                     title: {
-                        display: true,
+                        display: false, // Disabled since title is now in HTML
                         text: title,
                         color: '#e0e0e0'
                     },
@@ -443,7 +445,7 @@ class InequalitySimulator {
             }
         });
     }
-
+    /*
     createScatterChart(canvasId, title) {
         const ctx = document.getElementById(canvasId).getContext('2d');
         return new Chart(ctx, {
@@ -455,7 +457,7 @@ class InequalitySimulator {
                 responsive: true,
                 plugins: {
                     title: {
-                        display: true,
+                        display: false, // Disabled since title is now in HTML
                         text: title,
                         color: '#e0e0e0'
                     },
@@ -493,7 +495,7 @@ class InequalitySimulator {
             }
         });
     }
-
+    */
     createLineChart(canvasId, title) {
         const ctx = document.getElementById(canvasId).getContext('2d');
         return new Chart(ctx, {
@@ -506,7 +508,7 @@ class InequalitySimulator {
                 responsive: true,
                 plugins: {
                     title: {
-                        display: true,
+                        display: false, // Disabled since title is now in HTML
                         text: title,
                         color: '#e0e0e0'
                     },
@@ -556,6 +558,231 @@ class InequalitySimulator {
         });
         
         return { labels, counts };
+    }
+
+    drawClassFlows(chart) {
+        if (!this.flowData) return;
+        
+        const ctx = chart.ctx;
+        const chartArea = chart.chartArea;
+        const xScale = chart.scales.x;
+        const yScale = chart.scales.y;
+        
+        // Clear the entire canvas first
+        ctx.clearRect(0, 0, chart.canvas.width, chart.canvas.height);
+        
+        // Redraw the chart background (this is needed after clearing)
+        chart.draw();
+        
+        // Class positions
+        const classes = ['Lower', 'Middle', 'Upper'];
+        const classY = classes.map((_, i) => yScale.getPixelForValue(i));
+        const leftX = xScale.getPixelForValue(0);
+        const rightX = xScale.getPixelForValue(2);
+        
+        ctx.save();
+        
+        // Draw class boxes with better styling
+        classes.forEach((className, i) => {
+            const y = classY[i];
+            const boxHeight = 50;
+            const boxWidth = 90;
+            
+            // Left side (Previous) - darker background
+            ctx.fillStyle = 'rgba(70, 70, 70, 0.8)';
+            ctx.fillRect(leftX - boxWidth/2, y - boxHeight/2, boxWidth, boxHeight);
+            ctx.strokeStyle = '#e0e0e0';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(leftX - boxWidth/2, y - boxHeight/2, boxWidth, boxHeight);
+            
+            // Right side (Current) - slightly lighter
+            ctx.fillStyle = 'rgba(90, 90, 90, 0.8)';
+            ctx.fillRect(rightX - boxWidth/2, y - boxHeight/2, boxWidth, boxHeight);
+            ctx.strokeRect(rightX - boxWidth/2, y - boxHeight/2, boxWidth, boxHeight);
+            
+            // Class labels with better styling
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(className, leftX, y + 5);
+            ctx.fillText(className, rightX, y + 5);
+        });
+        
+        // Draw flow arrows with improved visibility
+        if (this.flowData.transitions) {
+            // Calculate max flow for thickness scaling
+            const allFlows = Object.values(this.flowData.transitions)
+                .flatMap(t => Object.values(t))
+                .filter(count => count > 0);
+            const maxFlow = Math.max(...allFlows, 1);
+            
+            Object.entries(this.flowData.transitions).forEach(([fromClass, transitions]) => {
+                const fromIndex = classes.indexOf(fromClass);
+                if (fromIndex === -1) return;
+                
+                Object.entries(transitions).forEach(([toClass, count]) => {
+                    const toIndex = classes.indexOf(toClass);
+                    if (toIndex === -1 || count <= 0) return;
+                    
+                    // Calculate flow thickness with better scaling
+                    const thickness = Math.max(2, (count / maxFlow) * 15);
+                    
+                    // Draw curved arrow
+                    this.drawFlowArrow(ctx, 
+                        leftX + 45, classY[fromIndex],
+                        rightX - 45, classY[toIndex],
+                        thickness, count);
+                });
+            });
+        }
+        
+        ctx.restore();
+    }
+    
+    drawFlowArrow(ctx, startX, startY, endX, endY, thickness, count) {
+        // Skip drawing if count is 0
+        if (count <= 0) return;
+        
+        // Calculate control points for bezier curve
+        const midX = (startX + endX) / 2;
+        const distance = Math.abs(endY - startY);
+        const controlOffset = Math.max(30, distance * 0.6); // Better curve control
+        
+        // Color based on direction with better visibility
+        let color;
+        if (endY < startY) {
+            color = 'rgba(46, 204, 113, 0.8)'; // Brighter green for upward mobility
+        } else if (endY > startY) {
+            color = 'rgba(231, 76, 60, 0.8)'; // Brighter red for downward mobility
+        } else {
+            color = 'rgba(52, 152, 219, 0.8)'; // Brighter blue for staying in same class
+        }
+        
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = Math.max(2, thickness);
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        
+        // Draw the curved line with better curve
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        
+        if (Math.abs(endY - startY) < 10) {
+            // For same-class transitions, draw a loop
+            const loopHeight = 30;
+            ctx.bezierCurveTo(
+                startX + 20, startY - loopHeight,
+                endX - 20, endY - loopHeight,
+                endX, endY
+            );
+        } else {
+            // For class changes, draw a smooth curve
+            ctx.bezierCurveTo(
+                startX + controlOffset, startY,
+                endX - controlOffset, endY,
+                endX, endY
+            );
+        }
+        ctx.stroke();
+        
+        // Draw arrowhead with better proportions
+        const arrowSize = Math.max(8, thickness * 0.8);
+        const angle = Math.atan2(endY - startY, endX - startX);
+        
+        ctx.beginPath();
+        ctx.moveTo(endX, endY);
+        ctx.lineTo(
+            endX - arrowSize * Math.cos(angle - Math.PI / 6),
+            endY - arrowSize * Math.sin(angle - Math.PI / 6)
+        );
+        ctx.lineTo(
+            endX - arrowSize * Math.cos(angle + Math.PI / 6),
+            endY - arrowSize * Math.sin(angle + Math.PI / 6)
+        );
+        ctx.closePath();
+        ctx.fill();
+        
+        // Add count label with background for better readability
+        const labelX = midX;
+        const labelY = (startY + endY) / 2 - (Math.abs(endY - startY) < 10 ? 25 : 15);
+        
+        // Draw background for text
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        const textWidth = ctx.measureText(Math.round(count).toString()).width;
+        ctx.fillRect(labelX - textWidth/2 - 4, labelY - 10, textWidth + 8, 16);
+        
+        // Draw text
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(Math.round(count).toString(), labelX, labelY);
+        
+        ctx.restore();
+    }
+
+    createScatterChart(canvasId, title) {
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        return new Chart(ctx, {
+            type: 'scatter',
+            data: {
+                datasets: []
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: false,
+                        text: title,
+                        color: '#e0e0e0'
+                    },
+                    legend: {
+                        display: false  // Hide legend since we're showing flow arrows
+                    }
+                },
+                onHover: () => {}, // Disable hover
+                animation: false, // Disable animation for immediate rendering
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time Period',
+                            color: '#e0e0e0'
+                        },
+                        min: 0,
+                        max: 2,
+                        ticks: { 
+                            color: '#e0e0e0',
+                            stepSize: 1,
+                            callback: function(value) {
+                                const labels = ['Previous', '', 'Current'];
+                                return labels[value] || '';
+                            }
+                        },
+                        grid: { color: 'rgba(224, 224, 224, 0.1)' }
+                    },
+                    y: {
+                        title: {
+                            display: false,  // Remove the Y-axis label
+                            text: 'Economic Class',
+                            color: '#e0e0e0'
+                        },
+                        min: -0.5,
+                        max: 2.5,
+                        ticks: { 
+                            color: '#e0e0e0',
+                            stepSize: 1,
+                            callback: function(value) {
+                                const labels = ['Lower', 'Middle', 'Upper'];
+                                return labels[value] || '';
+                            }
+                        },
+                        grid: { color: 'rgba(224, 224, 224, 0.1)' }
+                    }
+                }
+            }
+        });
     }
 
     async updateWealthChart() {
@@ -639,118 +866,200 @@ class InequalitySimulator {
         try {
             const data = await this.apiCall('/data/mobility');
             
-            // Check if this is comparison mode (data is an object with policy keys)
-            const isComparisonMode = data && typeof data === 'object' && !Array.isArray(data) && 
-                                    Object.keys(data).some(key => ['econophysics', 'powerful leaders', 'equal wealth distribution', 'innovation'].includes(key));
+            // Calculate transition flows from the mobility data
+            const newFlowData = this.calculateClassTransitions(data);
             
-            if (isComparisonMode) {
-                // Comparison mode: color by policy
-                const policyColors = {
-                    'econophysics': 'rgba(54, 162, 235, 0.7)',           // Blue
-                    'powerful leaders': 'rgba(255, 99, 132, 0.7)',      // Red
-                    'equal wealth distribution': 'rgba(75, 192, 192, 0.7)', // Teal
-                    'innovation': 'rgba(255, 159, 64, 0.7)'             // Orange
-                };
+            // Only update if flow data has changed significantly
+            if (!this.flowData || this.hasFlowDataChanged(this.flowData, newFlowData)) {
+                this.flowData = newFlowData;
                 
-                const classToY = { 'Lower': 0, 'Middle': 1, 'Upper': 2 };
-                const datasets = {};
-                let totalAgents = 0;
+                // Only update the chart if we don't have any datasets yet
+                if (this.charts.mobility.data.datasets.length === 0) {
+                    // Create a dummy dataset to trigger chart rendering only once
+                    this.charts.mobility.data.datasets = [{
+                        label: 'Class Transitions',
+                        data: [], // Empty data, flows are drawn by custom rendering
+                        showLine: false,
+                        pointRadius: 0
+                    }];
+                    this.charts.mobility.update('none');
+                }
                 
-                // Count total agents for position calculation
-                Object.values(data).forEach(policyData => {
-                    totalAgents += policyData.length;
-                });
-                
-                let agentIndex = 0;
-                
-                // Process each policy's data
-                Object.keys(data).forEach(policy => {
-                    const policyData = data[policy];
-                    
-                    if (!datasets[policy]) {
-                        datasets[policy] = {
-                            label: policy,
-                            data: [],
-                            backgroundColor: policyColors[policy] || 'rgba(128, 128, 128, 0.7)',
-                            borderColor: (policyColors[policy] || 'rgba(128, 128, 128, 0.7)').replace('0.7', '1'),
-                            pointRadius: []
-                        };
-                    }
-                    
-                    policyData.forEach((agent) => {
-                        const agentId = agentIndex; // Use global agent index
-                        
-                        // Assign fixed x position if not already assigned
-                        if (!(agentId in this.agentPositions)) {
-                            // Spread agents evenly across the x-axis
-                            this.agentPositions[agentId] = (agentIndex / totalAgents) * 50;
-                        }
-                        
-                        datasets[policy].data.push({
-                            x: this.agentPositions[agentId],
-                            y: classToY[agent.bracket]
-                        });
-                        
-                        // Size based on Bartholomew mobility ratio (0 to 1)
-                        const size = 5 + (agent.mobility * 15); // Size from 5 to 20
-                        datasets[policy].pointRadius.push(size);
-                        
-                        agentIndex++;
-                    });
-                });
-                
-                this.charts.mobility.data.datasets = Object.values(datasets);
-            } else {
-                // Single policy mode: color by class (original behavior)
-                const classToY = { 'Lower': 0, 'Middle': 1, 'Upper': 2 };
-                const classToColor = { 
-                    'Lower': 'rgba(255, 99, 132, 0.7)', 
-                    'Middle': 'rgba(54, 162, 235, 0.7)', 
-                    'Upper': 'rgba(75, 192, 192, 0.7)' 
-                };
-                
-                const datasets = {};
-                const totalAgents = data.length;
-                
-                data.forEach((agent, index) => {
-                    const className = agent.bracket;
-                    const agentId = index; // Use array index as agent ID
-                    
-                    // Assign fixed x position if not already assigned
-                    if (!(agentId in this.agentPositions)) {
-                        // Spread agents evenly across the x-axis
-                        this.agentPositions[agentId] = (index / totalAgents) * 50;
-                    }
-                    
-                    if (!datasets[className]) {
-                        datasets[className] = {
-                            label: className,
-                            data: [],
-                            backgroundColor: classToColor[className],
-                            borderColor: classToColor[className].replace('0.7', '1'),
-                            pointRadius: []
-                        };
-                    }
-                    
-                    datasets[className].data.push({
-                        x: this.agentPositions[agentId], // Use fixed x position
-                        y: classToY[className]
-                    });
-                    
-                    // Size based on Bartholomew mobility ratio (0 to 1)
-                    // Scale to make differences more visible
-                    const size = 5 + (agent.mobility * 15); // Size from 5 to 20
-                    datasets[className].pointRadius.push(size);
-                });
-                
-                this.charts.mobility.data.datasets = Object.values(datasets);
+                // Draw flows directly without chart update
+                this.drawClassFlows(this.charts.mobility);
             }
             
-            this.charts.mobility.update('none'); // Faster update mode
         } catch (error) {
             console.error('Error updating mobility chart:', error);
         }
     }
+    
+    hasFlowDataChanged(oldData, newData) {
+        if (!oldData || !newData) return true;
+        
+        // Compare transition matrices to see if there's significant change
+        const threshold = 2; // Only redraw if changes are > 2 people
+        
+        for (const fromClass of ['Lower', 'Middle', 'Upper']) {
+            for (const toClass of ['Lower', 'Middle', 'Upper']) {
+                const oldCount = oldData.transitions?.[fromClass]?.[toClass] || 0;
+                const newCount = newData.transitions?.[fromClass]?.[toClass] || 0;
+                if (Math.abs(oldCount - newCount) > threshold) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    
+    calculateClassTransitions(data) {
+        // Count current class distribution
+        const currentClassCounts = {
+            'Lower': 0,
+            'Middle': 0,
+            'Upper': 0
+        };
+        
+        if (Array.isArray(data)) {
+            // Single policy mode
+            data.forEach(agent => {
+                const currentClass = agent.bracket || 'Middle';
+                currentClassCounts[currentClass]++;
+            });
+        } else if (data && typeof data === 'object') {
+            // Comparison mode - aggregate all policies
+            Object.values(data).forEach(policyData => {
+                if (Array.isArray(policyData)) {
+                    policyData.forEach(agent => {
+                        const currentClass = agent.bracket || 'Middle';
+                        currentClassCounts[currentClass]++;
+                    });
+                }
+            });
+        }
+        
+        // Initialize transition matrix
+        const transitions = {
+            'Lower': { 'Lower': 0, 'Middle': 0, 'Upper': 0 },
+            'Middle': { 'Lower': 0, 'Middle': 0, 'Upper': 0 },
+            'Upper': { 'Lower': 0, 'Middle': 0, 'Upper': 0 }
+        };
+        
+        // If we don't have previous data, assume everyone stayed in their current class
+        if (!this.previousClassCounts) {
+            Object.keys(currentClassCounts).forEach(className => {
+                transitions[className][className] = currentClassCounts[className];
+            });
+            this.previousClassCounts = { ...currentClassCounts };
+            return { transitions };
+        }
+        
+        // Calculate net changes between classes
+        const classChanges = {};
+        Object.keys(currentClassCounts).forEach(className => {
+            classChanges[className] = currentClassCounts[className] - this.previousClassCounts[className];
+        });
+        
+        // Distribute transitions based on net changes
+        // Start with everyone staying in their previous class
+        Object.keys(this.previousClassCounts).forEach(className => {
+            transitions[className][className] = this.previousClassCounts[className];
+        });
+        
+        // Now calculate the actual movements based on net changes
+        // Priority: Lower->Middle->Upper for upward mobility, Upper->Middle->Lower for downward
+        const classes = ['Lower', 'Middle', 'Upper'];
+        
+        // Process upward mobility (Lower class losses go to Middle/Upper gains)
+        if (classChanges['Lower'] < 0 && (classChanges['Middle'] > 0 || classChanges['Upper'] > 0)) {
+            let lowerLosses = Math.abs(classChanges['Lower']);
+            
+            // Distribute losses from Lower to Middle and Upper gains
+            if (classChanges['Middle'] > 0) {
+                const toMiddle = Math.min(lowerLosses, classChanges['Middle']);
+                transitions['Lower']['Middle'] += toMiddle;
+                transitions['Lower']['Lower'] -= toMiddle;
+                lowerLosses -= toMiddle;
+            }
+            
+            if (lowerLosses > 0 && classChanges['Upper'] > 0) {
+                const toUpper = Math.min(lowerLosses, classChanges['Upper']);
+                transitions['Lower']['Upper'] += toUpper;
+                transitions['Lower']['Lower'] -= toUpper;
+                lowerLosses -= toUpper;
+            }
+        }
+        
+        // Process Middle class movements
+        if (classChanges['Middle'] < 0) {
+            let middleLosses = Math.abs(classChanges['Middle']);
+            
+            // Middle losses can go to Lower or Upper
+            if (classChanges['Lower'] > 0) {
+                const toLower = Math.min(middleLosses, classChanges['Lower']);
+                transitions['Middle']['Lower'] += toLower;
+                transitions['Middle']['Middle'] -= toLower;
+                middleLosses -= toLower;
+            }
+            
+            if (middleLosses > 0 && classChanges['Upper'] > 0) {
+                const toUpper = Math.min(middleLosses, classChanges['Upper']);
+                transitions['Middle']['Upper'] += toUpper;
+                transitions['Middle']['Middle'] -= toUpper;
+                middleLosses -= toUpper;
+            }
+        } else if (classChanges['Middle'] > 0) {
+            // Middle gains (some already handled from Lower losses above)
+            let remainingMiddleGains = classChanges['Middle'];
+            
+            // Check if Lower already contributed
+            const lowerToMiddle = transitions['Lower']['Middle'] - 0; // Subtract baseline (0)
+            remainingMiddleGains -= lowerToMiddle;
+            
+            // Remaining gains come from Upper losses
+            if (remainingMiddleGains > 0 && classChanges['Upper'] < 0) {
+                const fromUpper = Math.min(remainingMiddleGains, Math.abs(classChanges['Upper']));
+                transitions['Upper']['Middle'] += fromUpper;
+                transitions['Upper']['Upper'] -= fromUpper;
+            }
+        }
+        
+        // Process downward mobility from Upper
+        if (classChanges['Upper'] < 0) {
+            let upperLosses = Math.abs(classChanges['Upper']);
+            
+            // Some Upper losses may have already been handled above
+            const upperToMiddle = transitions['Upper']['Middle'] - 0; // Subtract baseline (0)
+            upperLosses -= upperToMiddle;
+            
+            // Remaining losses go to Lower
+            if (upperLosses > 0 && classChanges['Lower'] > 0) {
+                // Check remaining Lower gains not yet accounted for
+                const lowerToMiddle = transitions['Lower']['Middle'] - 0;
+                const middleToLower = transitions['Middle']['Lower'] - 0;
+                let remainingLowerGains = classChanges['Lower'] - middleToLower;
+                
+                if (remainingLowerGains > 0) {
+                    const toLower = Math.min(upperLosses, remainingLowerGains);
+                    transitions['Upper']['Lower'] += toLower;
+                    transitions['Upper']['Upper'] -= toLower;
+                }
+            }
+        }
+        
+        // Ensure no negative values and round to whole people
+        Object.keys(transitions).forEach(fromClass => {
+            Object.keys(transitions[fromClass]).forEach(toClass => {
+                transitions[fromClass][toClass] = Math.max(0, Math.round(transitions[fromClass][toClass]));
+            });
+        });
+        
+        // Store current counts for next iteration
+        this.previousClassCounts = { ...currentClassCounts };
+        
+        return { transitions };
+    }
+
 
     async updateGiniChart(incremental = false) {
         try {
