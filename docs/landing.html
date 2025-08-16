@@ -491,6 +491,54 @@
                 left: 20px;
             }
         }
+        /* Person View Styles */
+        .person-carousel {
+            position: relative;
+            margin-top: 60px;
+            background: #2d2d2d;
+            border: 1px solid #404040;
+            border-radius: 10px;
+            padding: 12px 56px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .person-track {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 16px;
+            width: 100%;
+            align-items: stretch;
+        }
+        .person-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            background: #23272a;
+            border: 1px solid #3a3a3a;
+            border-radius: 10px;
+            padding: 16px;
+            min-height: 360px;
+        }
+        .person-card.active { outline: 2px solid #4a5f7a; }
+        .person-wealth { color: #ecf0f1; font-size: 22px; font-weight: 800; margin-bottom: 8px; }
+        .person-policy { color: #a8c0ff; font-size: 13px; opacity: 0.95; margin-top: 10px; }
+    .person-name { color: #bdc3c7; font-weight: 700; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; margin-bottom: 6px; }
+
+        .avatar {
+            width: 160px; height: 200px;
+            position: relative;
+            background: #1f2a35;
+            border-radius: 8px;
+            border: 1px solid #4a5f7a;
+            margin: 8px 0;
+        }
+    .avatar img { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+        @media (max-width: 900px) {
+            .person-track { grid-template-columns: 1fr; }
+            .person-card { min-height: 320px; }
+        }
     </style>
 </head>
 <body>
@@ -507,6 +555,17 @@
         </div>
         
         <div class="sidebar-content">
+            <!-- View Switcher -->
+            <div class="controls-section" id="view-controls">
+                <div class="section-title">View</div>
+                <div class="control-group">
+                    <label for="view-select">Display</label>
+                    <select id="view-select">
+                        <option value="population">Population</option>
+                        <option value="person" selected>Person</option>
+                    </select>
+                </div>
+            </div>
             <!-- Status Section -->
             <div class="status-section">
                 <div class="status-title">System Status</div>
@@ -589,6 +648,35 @@
     <!-- Main Content -->
     <div class="main-content" id="main-content">
         <div id="error-message" class="error" style="display: none;"></div>
+
+        <!-- Person View (hidden by default) -->
+        <div id="person-view" style="display:none;">
+            <div class="person-carousel" id="person-carousel">
+                <button class="nav-arrow left" id="p-arrow-left" aria-label="Previous person">⟨</button>
+                <div class="person-track" id="person-track">
+                    <div class="person-card" id="card-richest" data-title="Wealthiest">
+                        <div class="person-name">Richest</div>
+                        <div class="person-wealth" id="richest-wealth">—</div>
+                        <div class="avatar" id="richest-avatar"></div>
+                        <div class="person-policy" id="richest-policy">—</div>
+                    </div>
+                    <div class="person-card active" id="card-you" data-title="You">
+                        <div class="person-name">You</div>
+                        <div class="person-wealth" id="you-wealth">—</div>
+                        <div class="avatar" id="you-avatar"></div>
+                        <div class="person-policy" id="you-policy">—</div>
+                    </div>
+                    <div class="person-card" id="card-poorest" data-title="Poorest">
+                        <div class="person-name">Poorest</div>
+                        <div class="person-wealth" id="poorest-wealth">—</div>
+                        <div class="avatar" id="poorest-avatar"></div>
+                        <div class="person-policy" id="poorest-policy">—</div>
+                    </div>
+                </div>
+                <button class="nav-arrow right" id="p-arrow-right" aria-label="Next person">⟩</button>
+                <div class="chart-hud" id="person-hud">You (2/3)</div>
+            </div>
+        </div>
 
         <!-- Chart Carousel -->
         <div class="chart-carousel" id="chart-carousel">
