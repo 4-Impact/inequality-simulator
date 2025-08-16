@@ -65,6 +65,14 @@ class InequalitySimulator {
         this.stepCount = 0; // Track current step for incremental updates
         this.agentPositions = {}; // Store fixed x positions for agents
         this.previousClassCounts = null; // Store previous class distribution for flow calculation
+    this.currentView = 'population';
+    this.youIndex = null; // random agent index for person view
+    this.youSeed = localStorage.getItem('sim_you_seed') || (Math.random().toString(36).slice(2));
+    localStorage.setItem('sim_you_seed', this.youSeed);
+    this.cachedRichestIdx = null;
+    this.cachedPoorestIdx = null;
+    this.cachedRichestWealth = null;
+    this.cachedPoorestWealth = null;
         
         this.initializeCharts();
         this.updateStatus();
@@ -76,6 +84,58 @@ class InequalitySimulator {
         window.addEventListener('beforeunload', () => {
             this.stopContinuousRun();
         });
+
+        // View dropdown handler
+        const viewSelect = document.getElementById('view-select');
+        if (viewSelect) {
+            viewSelect.addEventListener('change', (e) => {
+                this.setView(e.target.value);
+            });
+            // Default to person view on load
+            viewSelect.value = 'person';
+            this.setView('person');
+        }
+
+        // Person carousel controls
+        const pLeft = document.getElementById('p-arrow-left');
+        const pRight = document.getElementById('p-arrow-right');
+        this.personOrder = ['card-richest','card-you','card-poorest'];
+        this.personIndex = 1;
+        const updatePHUD = () => {
+            const titles = ['Wealthiest','You','Poorest'];
+            const hud = document.getElementById('person-hud');
+            if (hud) hud.textContent = `${titles[this.personIndex]} (${this.personIndex+1}/3)`;
+        };
+        const showP = (i) => {
+            const cards = this.personOrder.map(id=>document.getElementById(id));
+            this.personIndex = (i+cards.length)%cards.length;
+            cards.forEach((el,idx)=> el && el.classList.toggle('active', idx===this.personIndex));
+            updatePHUD();
+        };
+        if (pLeft && pRight) {
+            pLeft.addEventListener('click', ()=> showP(this.personIndex-1));
+            pRight.addEventListener('click', ()=> showP(this.personIndex+1));
+        }
+        document.addEventListener('DOMContentLoaded', ()=> showP(1));
+    }
+    setView(view) {
+        this.currentView = view;
+        const personView = document.getElementById('person-view');
+        const chartCarousel = document.getElementById('chart-carousel');
+        if (view === 'person') {
+            if (chartCarousel) chartCarousel.style.display = 'none';
+            if (personView) personView.style.display = 'block';
+            // pick a random agent index once per model init
+            if (this.youIndex == null && this.isInitialized) {
+                const popText = document.getElementById('status-population')?.textContent;
+                const pop = parseInt(popText || '0');
+                if (pop > 0) this.youIndex = Math.floor(Math.random() * pop);
+            }
+            this.updatePersonView();
+        } else {
+            if (personView) personView.style.display = 'none';
+            if (chartCarousel) chartCarousel.style.display = 'block';
+        }
     }
     
     async testBackendConnection() {
@@ -131,6 +191,10 @@ class InequalitySimulator {
         this.stepCount = 0;
         this.agentPositions = {}; // Reset agent positions
         this.previousClassCounts = null; // Reset previous class counts for flow calculation
+    this.youIndex = null; // reset chosen person on re-init
+    // keep youSeed stable across inits
+    this.cachedRichestIdx = null;
+    this.cachedPoorestIdx = null;
         
         // Reset line charts (Gini and Total Wealth)
         this.charts.gini.data.labels = [];
@@ -372,6 +436,10 @@ class InequalitySimulator {
             
             this.isInitialized = status.initialized;
             this.updateButtonStates();
+            // keep person view updated if visible
+            if (this.currentView === 'person' && this.isInitialized) {
+                this.updatePersonView();
+            }
         } catch (error) {
             document.getElementById('status-text').textContent = 'Connection Error';
         }
@@ -1189,23 +1257,24 @@ class InequalitySimulator {
         }
         
         try {
-            if (incremental) {
-                // For incremental updates, only update line charts incrementally
-                // and update other charts normally but with faster rendering
-                await Promise.all([
-                    this.updateWealthChart(),
-                    this.updateMobilityChart(),
-                    this.updateGiniChart(true),
-                    this.updateTotalWealthChart(true)
-                ]);
+            if (this.currentView === 'person') {
+                await this.updatePersonView();
             } else {
-                // Full update for initialization or refresh button
-                await Promise.all([
-                    this.updateWealthChart(),
-                    this.updateMobilityChart(),
-                    this.updateGiniChart(false),
-                    this.updateTotalWealthChart(false)
-                ]);
+                if (incremental) {
+                    await Promise.all([
+                        this.updateWealthChart(),
+                        this.updateMobilityChart(),
+                        this.updateGiniChart(true),
+                        this.updateTotalWealthChart(true)
+                    ]);
+                } else {
+                    await Promise.all([
+                        this.updateWealthChart(),
+                        this.updateMobilityChart(),
+                        this.updateGiniChart(false),
+                        this.updateTotalWealthChart(false)
+                    ]);
+                }
             }
             
             if (!incremental) {
@@ -1215,6 +1284,154 @@ class InequalitySimulator {
             if (!incremental) {
                 document.getElementById('status-text').textContent = 'Error updating charts';
             }
+        }
+    }
+
+    async updatePersonView() {
+        try {
+            const status = await this.apiCall('/status');
+            if (!status.initialized) return;
+            // Fetch wealth distribution to compute richest/poorest and select 'you'
+            const wealthData = await this.apiCall('/data/wealth-distribution');
+            let wealths = [];
+            let policies = [];
+            let isComparison = !wealthData.current && wealthData && typeof wealthData === 'object';
+            if (wealthData.current && Array.isArray(wealthData.current)) {
+                wealths = wealthData.current;
+                // For single policy mode, policy is uniform
+                policies = Array(wealths.length).fill(status.policy || '—');
+            } else if (isComparison) {
+                // Build arrays aligned per agent: wealths[] and policies[]
+                const order = ['econophysics', 'powerful leaders', 'equal wealth distribution', 'innovation'];
+                order.forEach(policy => {
+                    const arr = wealthData[policy] || [];
+                    arr.forEach(v => {
+                        wealths.push(v);
+                        policies.push(policy);
+                    });
+                });
+                // If mobility endpoint returns richer objects per agent, prefer that mapping
+                try {
+                    const mob = await this.apiCall('/data/mobility');
+                    // mob is object {policy: [ {wealth, policy,...} ]}
+                    const wealths2 = [];
+                    const policies2 = [];
+                    order.forEach(policy => {
+                        const list = mob[policy] || [];
+                        list.forEach(a => {
+                            if (typeof a.wealth === 'number') {
+                                wealths2.push(a.wealth);
+                                policies2.push(a.policy || policy);
+                            }
+                        });
+                    });
+                    if (wealths2.length) { wealths = wealths2; policies = policies2; }
+                } catch(_) { /* fallback already set */ }
+            }
+            if (!wealths.length) return;
+
+            // Determine richest and poorest
+            // Stable tie-breaking: if multiple with same wealth, keep previous index if still matches
+            let richest = Math.max(...wealths);
+            let poorest = Math.min(...wealths);
+            let candidateRichestIdx = wealths.indexOf(richest);
+            let candidatePoorestIdx = wealths.indexOf(poorest);
+            let richestIdx = candidateRichestIdx;
+            let poorestIdx = candidatePoorestIdx;
+            if (this.cachedRichestWealth === richest && this.cachedRichestIdx != null && wealths[this.cachedRichestIdx] === richest) {
+                richestIdx = this.cachedRichestIdx;
+            }
+            if (this.cachedPoorestWealth === poorest && this.cachedPoorestIdx != null && wealths[this.cachedPoorestIdx] === poorest) {
+                poorestIdx = this.cachedPoorestIdx;
+            }
+
+            // pick 'you' index within bounds
+            if (this.youIndex == null || this.youIndex >= wealths.length) {
+                this.youIndex = Math.floor(Math.random() * wealths.length);
+            }
+            const youWealth = wealths[this.youIndex];
+
+            // Update DOM
+            const fmt = (n) => {
+                if (typeof n !== 'number' || !isFinite(n)) return '—';
+                const parts = (val) => {
+                    if (Math.abs(val) >= 1e9) return (val/1e9).toFixed(1) + ' B';
+                    if (Math.abs(val) >= 1e6) return (val/1e6).toFixed(1) + ' M';
+                    if (Math.abs(val) >= 1e3) return (val/1e3).toFixed(1) + ' K';
+                    return val.toFixed(0);
+                };
+                return `$ ${parts(n)}`;
+            };
+            const policy = status.policy || '—';
+            const richestEl = document.getElementById('richest-wealth');
+            const poorestEl = document.getElementById('poorest-wealth');
+            const youEl = document.getElementById('you-wealth');
+            const youPolicyEl = document.getElementById('you-policy');
+            const richestPolicyEl = document.getElementById('richest-policy');
+            const poorestPolicyEl = document.getElementById('poorest-policy');
+            if (richestEl) richestEl.textContent = fmt(richest);
+            if (poorestEl) poorestEl.textContent = fmt(poorest);
+            if (youEl) youEl.textContent = fmt(youWealth);
+            // Policies per person
+            if (Array.isArray(policies) && policies.length === wealths.length) {
+                if (youPolicyEl) youPolicyEl.textContent = policies[this.youIndex] || policy;
+                if (richestPolicyEl) richestPolicyEl.textContent = policies[richestIdx] || policy;
+                if (poorestPolicyEl) poorestPolicyEl.textContent = policies[poorestIdx] || policy;
+            } else {
+                if (youPolicyEl) youPolicyEl.textContent = policy;
+                if (richestPolicyEl) richestPolicyEl.textContent = policy;
+                if (poorestPolicyEl) poorestPolicyEl.textContent = policy;
+            }
+
+            // Render avatars with mood based on absolute wealth relative to distribution
+            const renderAvatar = (elId, wealth, seed, mood) => {
+                const el = document.getElementById(elId);
+                if (!el) return;
+                // Clear
+                el.innerHTML = '';
+                // DiceBear avatars with restricted eyes/mouth
+                const style = 'avataaars';
+                const encodedSeed = encodeURIComponent(seed || 'seed');
+                // Restrict to smile/neutral/sad: choose eyes to be simple (no wink/heart/x/tear)
+                let mouthParam = 'default';
+                if (mood === 'happy') mouthParam = 'smile';
+                else if (mood === 'sad') mouthParam = 'sad';
+                else mouthParam = 'default';
+                const eyesParam = 'default'; // no wink, no hearts, no x, no tear
+                // Disable facial hair to avoid moustaches
+                const url = `https://api.dicebear.com/6.x/${style}/svg?seed=${encodedSeed}&mouth[]=${mouthParam}&eyes[]=${eyesParam}&facialHairProbability=0`;
+                const img = document.createElement('img');
+                img.alt = 'avatar';
+                img.loading = 'lazy';
+                img.src = url;
+                el.appendChild(img);
+            };
+            // compute mood by quantiles
+            const sorted = [...wealths].sort((a,b)=>a-b);
+            const q33 = sorted[Math.floor(sorted.length*0.33)] || 0;
+            const q66 = sorted[Math.floor(sorted.length*0.66)] || 0;
+            const moodOf = (w)=> (w>=q66?'happy':(w<=q33?'sad':'neutral'));
+
+            // update 'you' avatar with stable seed always
+            renderAvatar('you-avatar', youWealth, this.youSeed, moodOf(youWealth));
+
+            // only update richest/poorest avatars if identity changed
+            const richestChanged = this.cachedRichestIdx !== richestIdx;
+            const poorestChanged = this.cachedPoorestIdx !== poorestIdx;
+            if (richestChanged) {
+                this.cachedRichestIdx = richestIdx;
+                this.cachedRichestWealth = richest;
+                const rSeed = `richest-${richestIdx}`;
+                renderAvatar('richest-avatar', richest, rSeed, moodOf(richest));
+            }
+            if (poorestChanged) {
+                this.cachedPoorestIdx = poorestIdx;
+                this.cachedPoorestWealth = poorest;
+                const pSeed = `poorest-${poorestIdx}`;
+                renderAvatar('poorest-avatar', poorest, pSeed, moodOf(poorest));
+            }
+        } catch (e) {
+            console.warn('Person view update failed', e);
         }
     }
 }
