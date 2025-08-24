@@ -5,10 +5,22 @@ Bouchard and Mezard Wealth Inequality Model
 Adapted from Wealth Condensation in a Simple Model of the Economy
 
 """
+import numpy as np 
 
 def calc_brackets(model): 
-        most = max([agent.wealth for agent in model.agents])
-        return [int(most*0.33), int(most*0.67)]
+        wealth_data = [agent.wealth for agent in model.agents]
+
+        # If there's no wealth data, return default brackets
+        if not wealth_data:
+            return [0, 0]
+
+        # Define brackets using the 33rd and 67th percentiles of the wealth distribution
+        lower_bracket = np.percentile(wealth_data, 33)
+        upper_bracket = np.percentile(wealth_data, 67)
+
+        return [lower_bracket, upper_bracket]
+
+
 #Helper function for churn
 
 def calculate_churn(model): 

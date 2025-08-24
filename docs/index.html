@@ -249,6 +249,95 @@
             }
         }
 
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.7);
+        }
+        
+        .modal-content {
+            background-color: #2d2d2d;
+            margin: 10% auto;
+            padding: 25px;
+            border: 1px solid #404040;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 600px;
+            color: #e0e0e0;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #404040;
+            padding-bottom: 15px;
+        }
+        
+        .modal-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #3498db;
+            margin: 0;
+        }
+        
+        .close-button {
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: #bdc3c7;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: all 0.3s;
+        }
+        
+        .close-button:hover {
+            background-color: #404040;
+            color: #e0e0e0;
+        }
+
+        .avatar-options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .avatar-options label {
+            display: block;
+            margin-bottom: 10px;
+        }
+
+        .avatar-options select {
+            width: 100%;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #4a5f7a;
+            background-color: #34495e;
+            color: #ecf0f1;
+        }
+        
+        .modal-footer {
+            padding-top: 15px;
+            border-top: 1px solid #404040;
+            margin-top: 20px;
+            text-align: right;
+        }
+        
         /* Responsive design */
         @media (max-width: 768px) {
             .title {
@@ -298,7 +387,6 @@
 <body>
     <div class="background-animation"></div>
     
-    <!-- Floating particles -->
     <div class="particle"></div>
     <div class="particle"></div>
     <div class="particle"></div>
@@ -349,9 +437,72 @@
                 </div>
             </div>
         </div>
-        <a href="landing.html" class="cta-button">
+        <a href="#" class="cta-button" id="launch-button">
             Launch Simulator
         </a>
     </div>
+
+    <div id="avatar-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Choose Your Avatar</h2>
+                <button class="close-button" onclick="closeAvatarModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="avatar-options">
+                    <div>
+                        <label for="gender-select">Gender:</label>
+                        <select id="gender-select">
+                            <option value="male" selected>Male</option>
+                            <option value="female">Female</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="ethnicity-select">Ethnicity:</label>
+                        <select id="ethnicity-select">
+                            <option value="white">White</option>
+                            <option value="black">Black</option>
+                            <option value="asian" selected>Asian</option>
+                            <option value="latino">Latino</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="cta-button" id="continue-button">Continue</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const launchButton = document.getElementById('launch-button');
+        const avatarModal = document.getElementById('avatar-modal');
+        const continueButton = document.getElementById('continue-button');
+
+        launchButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            avatarModal.style.display = 'block';
+        });
+
+        function closeAvatarModal() {
+            avatarModal.style.display = 'none';
+        }
+
+        continueButton.addEventListener('click', () => {
+            const gender = document.getElementById('gender-select').value;
+            const ethnicity = document.getElementById('ethnicity-select').value;
+
+            localStorage.setItem('avatar_gender', gender);
+            localStorage.setItem('avatar_ethnicity', ethnicity);
+
+            window.location.href = 'landing.html';
+        });
+
+        window.onclick = function(event) {
+            if (event.target == avatarModal) {
+                closeAvatarModal();
+            }
+        }
+    </script>
 </body>
 </html>

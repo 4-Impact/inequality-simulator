@@ -1384,7 +1384,7 @@ class InequalitySimulator {
             }
 
             // Render avatars with mood based on absolute wealth relative to distribution
-            const renderAvatar = (elId, wealth, seed, mood) => {
+            const renderAvatar = (elId, wealth, seed, mood, gender = 'male', ethnicity = 'asian') => {
                 const el = document.getElementById(elId);
                 if (!el) return;
                 // Clear
@@ -1392,6 +1392,14 @@ class InequalitySimulator {
                 // DiceBear avatars with restricted eyes/mouth
                 const style = 'avataaars';
                 const encodedSeed = encodeURIComponent(seed || 'seed');
+
+                const skinColorMap = {
+                    white: 'light',
+                    black: 'darkBrown',
+                    asian: 'yellow',
+                    latino: 'tanned'
+                };
+
                 // Restrict to smile/neutral/sad: choose eyes to be simple (no wink/heart/x/tear)
                 let mouthParam = 'default';
                 if (mood === 'happy') mouthParam = 'smile';
@@ -1399,7 +1407,7 @@ class InequalitySimulator {
                 else mouthParam = 'default';
                 const eyesParam = 'default'; // no wink, no hearts, no x, no tear
                 // Disable facial hair to avoid moustaches
-                const url = `https://api.dicebear.com/6.x/${style}/svg?seed=${encodedSeed}&mouth[]=${mouthParam}&eyes[]=${eyesParam}&facialHairProbability=0`;
+                const url = `https://api.dicebear.com/6.x/${style}/svg?seed=${encodedSeed}&mouth[]=${mouthParam}&eyes[]=${eyesParam}&facialHairProbability=0&sex[]=${gender}&skinColor[]=${skinColorMap[ethnicity]}`;
                 const img = document.createElement('img');
                 img.alt = 'avatar';
                 img.loading = 'lazy';
@@ -1413,7 +1421,9 @@ class InequalitySimulator {
             const moodOf = (w)=> (w>=q66?'happy':(w<=q33?'sad':'neutral'));
 
             // update 'you' avatar with stable seed always
-            renderAvatar('you-avatar', youWealth, this.youSeed, moodOf(youWealth));
+            const gender = localStorage.getItem('avatar_gender') || 'male';
+            const ethnicity = localStorage.getItem('avatar_ethnicity') || 'asian';
+            renderAvatar('you-avatar', youWealth, this.youSeed, moodOf(youWealth), gender, ethnicity);
 
             // only update richest/poorest avatars if identity changed
             const richestChanged = this.cachedRichestIdx !== richestIdx;
@@ -1448,34 +1458,34 @@ document.addEventListener('DOMContentLoaded', function() {
 async function initializeModel() {
     const policy = document.getElementById('policy-select').value;
     const population = parseInt(document.getElementById('population-input').value);
-    const startupRequired = parseInt(document.getElementById('startup-select').value);
     
-    const initBtn = document.getElementById('initialize-btn');
-    initBtn.disabled = true;
-    initBtn.textContent = 'Initializing...';
+    showInfoModal(policy, async () => {
+        const initBtn = document.getElementById('initialize-btn');
+        initBtn.disabled = true;
+        initBtn.textContent = 'Initializing...';
     
-    try {
-        await simulator.apiCall('/initialize', 'POST', {
-            policy: policy,
-            population: population,
-            start_up_required: startupRequired
-        });
-        
-        // Reset charts for new model
-        simulator.resetCharts();
-        
-        // Wait a moment for initialization to complete
-        setTimeout(async () => {
-            await simulator.updateStatus();
-            await simulator.refreshCharts(false); // Full update for initialization
+        try {
+            await simulator.apiCall('/initialize', 'POST', {
+                policy: policy,
+                population: population
+            });
+            
+            // Reset charts for new model
+            simulator.resetCharts();
+            
+            // Wait a moment for initialization to complete
+            setTimeout(async () => {
+                await simulator.updateStatus();
+                await simulator.refreshCharts(false); // Full update for initialization
+                initBtn.textContent = 'Initialize Model';
+                initBtn.disabled = false;
+            }, 1000);
+            
+        } catch (error) {
             initBtn.textContent = 'Initialize Model';
             initBtn.disabled = false;
-        }, 1000);
-        
-    } catch (error) {
-        initBtn.textContent = 'Initialize Model';
-        initBtn.disabled = false;
-    }
+        }
+    });
 }
 
 async function stepModel() {
