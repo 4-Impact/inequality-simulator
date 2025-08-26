@@ -492,10 +492,12 @@
             const gender = document.getElementById('gender-select').value;
             const ethnicity = document.getElementById('ethnicity-select').value;
 
+            // Set localStorage as a fallback
             localStorage.setItem('avatar_gender', gender);
             localStorage.setItem('avatar_ethnicity', ethnicity);
 
-            window.location.href = 'landing.html';
+            // Pass choices via URL parameters for reliability
+            window.location.href = `landing.html?gender=${gender}&ethnicity=${ethnicity}`;
         });
 
         window.onclick = function(event) {

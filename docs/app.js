@@ -1387,42 +1387,61 @@ class InequalitySimulator {
             const renderAvatar = (elId, wealth, seed, mood, gender = 'male', ethnicity = 'asian') => {
                 const el = document.getElementById(elId);
                 if (!el) return;
-                // Clear
+                
+                // Clear previous avatar
                 el.innerHTML = '';
-                // DiceBear avatars with restricted eyes/mouth
-                const style = 'avataaars';
+                
+                // Use the successor to the 'avataaars' style
+                const style = 'personas';
                 const encodedSeed = encodeURIComponent(seed || 'seed');
 
                 const skinColorMap = {
-                    white: 'light',
-                    black: 'darkBrown',
-                    asian: 'yellow',
-                    latino: 'tanned'
+                    white: 'eeb4a4',
+                    black: '623d36',
+                    asian: 'b16a5b',
+                    latino: 'd78774'
                 };
 
-                // Restrict to smile/neutral/sad: choose eyes to be simple (no wink/heart/x/tear)
-                let mouthParam = 'default';
+                // Determine mouth parameter based on mood
+                let mouthParam = 'smirk';
                 if (mood === 'happy') mouthParam = 'smile';
-                else if (mood === 'sad') mouthParam = 'sad';
-                else mouthParam = 'default';
-                const eyesParam = 'default'; // no wink, no hearts, no x, no tear
-                // Disable facial hair to avoid moustaches
-                const url = `https://api.dicebear.com/6.x/${style}/svg?seed=${encodedSeed}&mouth[]=${mouthParam}&eyes[]=${eyesParam}&facialHairProbability=0&sex[]=${gender}&skinColor[]=${skinColorMap[ethnicity]}`;
+                else if (mood === 'sad') mouthParam = 'frown';
+                
+                // Eyes parameter remains 'default'
+                const eyesParam = 'default';
+
+                // Construct the updated URL for DiceBear API v8.x
+                // Note: Parameters like 'mouth' and 'sex' no longer use '[]'
+                const url = `https://api.dicebear.com/9.x/${style}/svg?seed=${encodedSeed}&mouth=${mouthParam}&eyes=${eyesParam}&facialHairProbability=10&sex=${gender}&skinColor=${skinColorMap[ethnicity]}`;
+                console.log('Avatar URL:', url);
                 const img = document.createElement('img');
                 img.alt = 'avatar';
                 img.loading = 'lazy';
                 img.src = url;
                 el.appendChild(img);
             };
-            // compute mood by quantiles
-            const sorted = [...wealths].sort((a,b)=>a-b);
-            const q33 = sorted[Math.floor(sorted.length*0.33)] || 0;
-            const q66 = sorted[Math.floor(sorted.length*0.66)] || 0;
-            const moodOf = (w)=> (w>=q66?'happy':(w<=q33?'sad':'neutral'));
+            
+            // compute mood by brackets, mirroring utilities.py
+            const sortedWealth = [...wealths].sort((a, b) => a - b);
+            const lowerBracket = sortedWealth[Math.floor(sortedWealth.length * 0.33)] || 0;
+            const upperBracket = sortedWealth[Math.floor(sortedWealth.length * 0.67)] || 0;
+            
+            const moodOf = (w) => {
+                if (w >= upperBracket) return 'happy';
+                if (w < lowerBracket) return 'sad';
+                return 'neutral';
+            };
+
 
             // update 'you' avatar with stable seed always
-            const gender = localStorage.getItem('avatar_gender') || 'male';
-            const ethnicity = localStorage.getItem('avatar_ethnicity') || 'asian';
+            const urlParams = new URLSearchParams(window.location.search);
+            const gender = urlParams.get('gender') || localStorage.getItem('avatar_gender') || 'male';
+            const ethnicity = urlParams.get('ethnicity') || localStorage.getItem('avatar_ethnicity') || 'asian';
+            
+            // Save to localStorage so it persists on reloads of landing.html
+            localStorage.setItem('avatar_gender', gender);
+            localStorage.setItem('avatar_ethnicity', ethnicity);
+
             renderAvatar('you-avatar', youWealth, this.youSeed, moodOf(youWealth), gender, ethnicity);
 
             // only update richest/poorest avatars if identity changed
