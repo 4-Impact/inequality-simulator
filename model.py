@@ -97,7 +97,7 @@ class WealthAgent(mesa.Agent):
         else: 
             self.wealth -= self.wealth
         
-        if self.model.policy=="powerful leaders" or self.model.policy=="equal wealth distribution": 
+        if self.model.policy=="powerful leaders": 
             party_elites = self.model.agents.select(lambda a: a.party_elite==True)
             #pay tax to the party_elite
             party_elite = self.random.choice(party_elites)

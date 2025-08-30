@@ -6,7 +6,7 @@
     <title>Inequality Simulator</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
     <script>
-      // Chart.js is now loaded, we'll handle Sankey differently in the app.js
+      "// Chart.js is now loaded, we'll handle Sankey differently in the app.js"
       console.log('Chart.js loaded:', !!window.Chart);
     </script>
     <style>
@@ -708,19 +708,53 @@
         const infoContent = {
             'econophysics': {
                 title: "Econophysics Policy",
-                content: `<p>Models wealth distribution using principles from statistical physics. Agents exchange wealth randomly, leading to naturally occurring inequality patterns similar to the Boltzmann distribution in thermodynamics.</p>`
+                content: `<p>This the base model. All other policies add features to this simple exchange of wealth.</p>
+                <p>How it works for each step:</p>
+                <ul>
+                <li> You get a payday and pay a survival cost based on the amount of wealth in the population. </li>
+                <li> You exchange wealth randomly- pick another person give them one of your wealth. Sometimes people pick you and give you wealth.</li>
+                </ul>
+                <p>Intuitively one may think that wealth amount will be generally the same, but instead a unequal distribution of wealth occurs. </p>
+                <p>Take a look the population view and see how each policy impacts total wealth and other metrics over time.</p>`
             },
             'powerful leaders': {
                 title: "Powerful Leaders Policy",
-                content: `<p>Implements a system where certain agents (elites) implement policies that allow them to retain their wealth and not compete fairly.</p>`
+                content: `<p>In this variation, a group of agents are picked as party elites. They then tax all the other agents.
+                    This can be thought of as a feudal system or fascist system, where those in power stay in power.</p>
+                <p>How it works for each step:</p>
+                <ul>
+                <li> You get a payday and pay a survival cost based on the amount of wealth in the population. </li>
+                <li> Pay a tax to a randomly selected "elite" agent. </li>
+                <li> You exchange wealth randomly - pick a non-elite agent give them one of your wealth. Sometimes people pick you and give you wealth.</li>
+                </ul>
+                <p> Notice on the population level, this inhibits wealth accumulation.</p>`
             },
             'equal wealth distribution': {
                 title: "Equal Wealth Distribution Policy",
-                content: `<p>Attempts to maintain wealth equality through redistribution mechanisms, forces a constant redistribution of wealth at each step.</p>`
+                content: 
+                `<p>In this variation, after each step all wealth is redistributed. This represents a communist ideal, 
+                    where wealth can be perfectly redistributed (or can it?).</p>
+                <p>How it works for each step:</p>
+                <ul>
+                <li> You get a payday and pay a survival cost based on the amount of wealth in the population. </li>
+                <li> You exchange wealth randomly - pick an agent give them one of your wealth. Sometimes people pick you and give you wealth.</li>
+                <li> All wealth is then redistributed equally then get the same amount of wealth</li>
+                </ul>
+                <p> Notice on the population level, this inhibits wealth accumulation.</p>`
             },
             'innovation': {
                 title: "Innovation Policy",
-                content: `<p>Rewards agents for innovation and entrepreneurship, allowing some agents to generate wealth through new ideas and risk-taking, representing market-based economies with innovation incentives.</p>`
+                content: `<p>In this variation, each agent has an innovation attribute. If an agents has enough wealth for an initial 
+                    start up (based on total population wealth), then they can then invest in a "new idea" and they get in increase in pay.
+                    This pay increase, then degrades over time as the innovation becomes less relevant. (The innovation attribute can also
+                    decrease pay because the agents idea did not succeed)</p>
+                <p>How it works for each step:</p>
+                <ul>
+                <li> You get a payday and pay a survival cost based on the amount of wealth in the population. </li>
+                <li> You exchange wealth randomly - pick an agent give them one of your wealth. Sometimes people pick you and give you wealth.</li>
+                <li> If you have enough wealth, you "invest" in your ideas and can get a pay increase.</li>
+                </ul>
+                <p> Notice on the population level, sometimes econophysics generates more wealth, sometimes, innovation does.</p>`
             },
             'comparison': {
                 title: "Comparison Mode",
@@ -730,13 +764,6 @@
                 title: "Population Size",
                 content: `
                     <p>The total number of agents (individuals) in the economic simulation. Each agent represents an economic actor with wealth that can change over time through various interactions.</p>
-                    
-                    <p><strong>Effects of Population Size:</strong></p>
-                    <p>• <strong>Smaller populations (50-100):</strong> More volatile results, individual actions have larger impacts, easier to observe specific agent behaviors.</p>
-                    <p>• <strong>Medium populations (200-500):</strong> Good balance between computational efficiency and statistical significance, recommended for most analyses.</p>
-                    <p>• <strong>Larger populations (500-1000):</strong> More stable statistical patterns, smoother curves, but slower simulation speed.</p>
-                    
-                    <p>The population size affects the stability of inequality measures and the time needed for the system to reach equilibrium.</p>
                 `
             },
             totalWealth: {
