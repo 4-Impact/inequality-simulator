@@ -67,7 +67,8 @@ class InequalitySimulator {
         this.previousClassCounts = null; // Store previous class distribution for flow calculation
     this.currentView = 'population';
     this.youIndex = null; // random agent index for person view
-    this.youSeed = localStorage.getItem('sim_you_seed') || (Math.random().toString(36).slice(2));
+    const urlParams = new URLSearchParams(window.location.search);
+    this.youSeed = urlParams.get('seed') || localStorage.getItem('sim_you_seed') || (Math.random().toString(36).slice(2));
     localStorage.setItem('sim_you_seed', this.youSeed);
     this.cachedRichestIdx = null;
     this.cachedPoorestIdx = null;
@@ -1404,7 +1405,7 @@ class InequalitySimulator {
                 const eyesParam = 'open';
 
                 // Construct the updated URL for DiceBear API v8.x
-                const url = `https://api.dicebear.com/9.x/${style}/svg?seed=${encodedSeed}&mouth=${mouthParam}&eyes=${eyesParam}&facialHairProbability=10`;
+                const url = `https://api.dicebear.com/9.x/${style}/svg?seed=${encodedSeed}&mouth=${mouthParam}&eyes=${eyesParam}`;
                 console.log('Avatar URL:', url);
                 const img = document.createElement('img');
                 img.alt = 'avatar';
@@ -1414,7 +1415,7 @@ class InequalitySimulator {
             };
             
             // compute mood by brackets, mirroring utilities.py
-            const sortedWealth = [...wealths].sort((a, b) => a - b)
+            const sortedWealth = [...wealths].sort((a, b) => a - b);
             const lowerBracket = sortedWealth[Math.floor(sortedWealth.length * 0.33)] || 0;
             const upperBracket = sortedWealth[Math.floor(sortedWealth.length * 0.67)] || 0;
             
@@ -1426,13 +1427,7 @@ class InequalitySimulator {
 
 
             // update 'you' avatar with stable seed always
-            const urlParams = new URLSearchParams(window.location.search);
-            const seed = urlParams.get('seed') || localStorage.getItem('avatar_seed') || 'default-seed';
-            
-            // Save to localStorage so it persists on reloads of landing.html
-            localStorage.setItem('avatar_seed', seed);
-
-            renderAvatar('you-avatar', youWealth, seed, moodOf(youWealth));
+            renderAvatar('you-avatar', youWealth, this.youSeed, moodOf(youWealth));
 
             // only update richest/poorest avatars if identity changed
             const richestChanged = this.cachedRichestIdx !== richestIdx;

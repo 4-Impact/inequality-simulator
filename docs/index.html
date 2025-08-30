@@ -495,6 +495,7 @@
                 const radio = document.createElement('input');
                 radio.type = 'radio';
                 radio.name = 'avatar-seed';
+                radio.value = seed;
                 radio.id = `avatar-${i}`;
                 if (i === 0) {
                     radio.checked = true;
@@ -534,14 +535,11 @@
 
         continueButton.addEventListener('click', () => {
             if (selectedSeed) {
-                const [seed, gender, ethnicity] = selectedSeed.split(',');
                 // Set localStorage as a fallback
-                localStorage.setItem('avatar_seed', seed);
-                localStorage.setItem('avatar_gender', gender);
-                localStorage.setItem('avatar_ethnicity', ethnicity);
+                localStorage.setItem('avatar_seed', selectedSeed);
 
                 // Pass choices via URL parameters for reliability
-                window.location.href = `landing.html?seed=${seed}&mouth=smile`;
+                window.location.href = `landing.html?seed=${selectedSeed}&mouth=smile`;
             }
         });
 
