@@ -1384,7 +1384,7 @@ class InequalitySimulator {
             }
 
             // Render avatars with mood based on absolute wealth relative to distribution
-            const renderAvatar = (elId, wealth, seed, mood, gender = 'male', ethnicity = 'asian') => {
+            const renderAvatar = (elId, wealth, seed, mood) => {
                 const el = document.getElementById(elId);
                 if (!el) return;
                 
@@ -1395,24 +1395,16 @@ class InequalitySimulator {
                 const style = 'personas';
                 const encodedSeed = encodeURIComponent(seed || 'seed');
 
-                const skinColorMap = {
-                    white: 'eeb4a4',
-                    black: '623d36',
-                    asian: 'b16a5b',
-                    latino: 'd78774'
-                };
-
                 // Determine mouth parameter based on mood
                 let mouthParam = 'smirk';
                 if (mood === 'happy') mouthParam = 'smile';
                 else if (mood === 'sad') mouthParam = 'frown';
                 
                 // Eyes parameter remains 'default'
-                const eyesParam = 'default';
+                const eyesParam = 'open';
 
                 // Construct the updated URL for DiceBear API v8.x
-                // Note: Parameters like 'mouth' and 'sex' no longer use '[]'
-                const url = `https://api.dicebear.com/9.x/${style}/svg?seed=${encodedSeed}&mouth=${mouthParam}&eyes=${eyesParam}&facialHairProbability=10&sex=${gender}&skinColor=${skinColorMap[ethnicity]}`;
+                const url = `https://api.dicebear.com/9.x/${style}/svg?seed=${encodedSeed}&mouth=${mouthParam}&eyes=${eyesParam}&facialHairProbability=10`;
                 console.log('Avatar URL:', url);
                 const img = document.createElement('img');
                 img.alt = 'avatar';
@@ -1422,7 +1414,7 @@ class InequalitySimulator {
             };
             
             // compute mood by brackets, mirroring utilities.py
-            const sortedWealth = [...wealths].sort((a, b) => a - b);
+            const sortedWealth = [...wealths].sort((a, b) => a - b)
             const lowerBracket = sortedWealth[Math.floor(sortedWealth.length * 0.33)] || 0;
             const upperBracket = sortedWealth[Math.floor(sortedWealth.length * 0.67)] || 0;
             
@@ -1435,14 +1427,12 @@ class InequalitySimulator {
 
             // update 'you' avatar with stable seed always
             const urlParams = new URLSearchParams(window.location.search);
-            const gender = urlParams.get('gender') || localStorage.getItem('avatar_gender') || 'male';
-            const ethnicity = urlParams.get('ethnicity') || localStorage.getItem('avatar_ethnicity') || 'asian';
+            const seed = urlParams.get('seed') || localStorage.getItem('avatar_seed') || 'default-seed';
             
             // Save to localStorage so it persists on reloads of landing.html
-            localStorage.setItem('avatar_gender', gender);
-            localStorage.setItem('avatar_ethnicity', ethnicity);
+            localStorage.setItem('avatar_seed', seed);
 
-            renderAvatar('you-avatar', youWealth, this.youSeed, moodOf(youWealth), gender, ethnicity);
+            renderAvatar('you-avatar', youWealth, seed, moodOf(youWealth));
 
             // only update richest/poorest avatars if identity changed
             const richestChanged = this.cachedRichestIdx !== richestIdx;

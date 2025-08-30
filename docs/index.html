@@ -313,7 +313,7 @@
 
         .avatar-options {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr;
             gap: 20px;
         }
 
@@ -322,7 +322,7 @@
             margin-bottom: 10px;
         }
 
-        .avatar-options select {
+        .avatar-options input {
             width: 100%;
             padding: 8px;
             border-radius: 4px;
@@ -451,20 +451,8 @@
             <div class="modal-body">
                 <div class="avatar-options">
                     <div>
-                        <label for="gender-select">Gender:</label>
-                        <select id="gender-select">
-                            <option value="male" selected>Male</option>
-                            <option value="female">Female</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label for="ethnicity-select">Ethnicity:</label>
-                        <select id="ethnicity-select">
-                            <option value="white">White</option>
-                            <option value="black">Black</option>
-                            <option value="asian" selected>Asian</option>
-                            <option value="latino">Latino</option>
-                        </select>
+                        <label for="seed-input">Avatar Seed:</label>
+                        <input type="text" id="seed-input" placeholder="Enter a seed...">
                     </div>
                 </div>
             </div>
@@ -489,15 +477,13 @@
         }
 
         continueButton.addEventListener('click', () => {
-            const gender = document.getElementById('gender-select').value;
-            const ethnicity = document.getElementById('ethnicity-select').value;
+            const seed = document.getElementById('seed-input').value;
 
             // Set localStorage as a fallback
-            localStorage.setItem('avatar_gender', gender);
-            localStorage.setItem('avatar_ethnicity', ethnicity);
+            localStorage.setItem('avatar_seed', seed);
 
             // Pass choices via URL parameters for reliability
-            window.location.href = `landing.html?gender=${gender}&ethnicity=${ethnicity}`;
+            window.location.href = `landing.html?seed=${seed}`;
         });
 
         window.onclick = function(event) {
