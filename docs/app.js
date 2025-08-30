@@ -67,7 +67,8 @@ class InequalitySimulator {
         this.previousClassCounts = null; // Store previous class distribution for flow calculation
     this.currentView = 'population';
     this.youIndex = null; // random agent index for person view
-    this.youSeed = localStorage.getItem('sim_you_seed') || (Math.random().toString(36).slice(2));
+    const urlParams = new URLSearchParams(window.location.search);
+    this.youSeed = urlParams.get('seed') || localStorage.getItem('sim_you_seed') || (Math.random().toString(36).slice(2));
     localStorage.setItem('sim_you_seed', this.youSeed);
     this.cachedRichestIdx = null;
     this.cachedPoorestIdx = null;
@@ -1387,30 +1388,43 @@ class InequalitySimulator {
             const renderAvatar = (elId, wealth, seed, mood) => {
                 const el = document.getElementById(elId);
                 if (!el) return;
-                // Clear
+                
+                // Clear previous avatar
                 el.innerHTML = '';
-                // DiceBear avatars with restricted eyes/mouth
-                const style = 'avataaars';
+                
+                // Use the successor to the 'avataaars' style
+                const style = 'personas';
                 const encodedSeed = encodeURIComponent(seed || 'seed');
-                // Restrict to smile/neutral/sad: choose eyes to be simple (no wink/heart/x/tear)
-                let mouthParam = 'default';
+
+                // Determine mouth parameter based on mood
+                let mouthParam = 'smirk';
                 if (mood === 'happy') mouthParam = 'smile';
-                else if (mood === 'sad') mouthParam = 'sad';
-                else mouthParam = 'default';
-                const eyesParam = 'default'; // no wink, no hearts, no x, no tear
-                // Disable facial hair to avoid moustaches
-                const url = `https://api.dicebear.com/6.x/${style}/svg?seed=${encodedSeed}&mouth[]=${mouthParam}&eyes[]=${eyesParam}&facialHairProbability=0`;
+                else if (mood === 'sad') mouthParam = 'frown';
+                
+                // Eyes parameter remains 'default'
+                const eyesParam = 'open';
+
+                // Construct the updated URL for DiceBear API v8.x
+                const url = `https://api.dicebear.com/9.x/${style}/svg?seed=${encodedSeed}&mouth=${mouthParam}&eyes=${eyesParam}`;
+                console.log('Avatar URL:', url);
                 const img = document.createElement('img');
                 img.alt = 'avatar';
                 img.loading = 'lazy';
                 img.src = url;
                 el.appendChild(img);
             };
-            // compute mood by quantiles
-            const sorted = [...wealths].sort((a,b)=>a-b);
-            const q33 = sorted[Math.floor(sorted.length*0.33)] || 0;
-            const q66 = sorted[Math.floor(sorted.length*0.66)] || 0;
-            const moodOf = (w)=> (w>=q66?'happy':(w<=q33?'sad':'neutral'));
+            
+            // compute mood by brackets, mirroring utilities.py
+            const sortedWealth = [...wealths].sort((a, b) => a - b);
+            const lowerBracket = sortedWealth[Math.floor(sortedWealth.length * 0.33)] || 0;
+            const upperBracket = sortedWealth[Math.floor(sortedWealth.length * 0.67)] || 0;
+            
+            const moodOf = (w) => {
+                if (w >= upperBracket) return 'happy';
+                if (w < lowerBracket) return 'sad';
+                return 'neutral';
+            };
+
 
             // update 'you' avatar with stable seed always
             renderAvatar('you-avatar', youWealth, this.youSeed, moodOf(youWealth));
@@ -1448,34 +1462,34 @@ document.addEventListener('DOMContentLoaded', function() {
 async function initializeModel() {
     const policy = document.getElementById('policy-select').value;
     const population = parseInt(document.getElementById('population-input').value);
-    const startupRequired = parseInt(document.getElementById('startup-select').value);
     
-    const initBtn = document.getElementById('initialize-btn');
-    initBtn.disabled = true;
-    initBtn.textContent = 'Initializing...';
+    showInfoModal(policy, async () => {
+        const initBtn = document.getElementById('initialize-btn');
+        initBtn.disabled = true;
+        initBtn.textContent = 'Initializing...';
     
-    try {
-        await simulator.apiCall('/initialize', 'POST', {
-            policy: policy,
-            population: population,
-            start_up_required: startupRequired
-        });
-        
-        // Reset charts for new model
-        simulator.resetCharts();
-        
-        // Wait a moment for initialization to complete
-        setTimeout(async () => {
-            await simulator.updateStatus();
-            await simulator.refreshCharts(false); // Full update for initialization
+        try {
+            await simulator.apiCall('/initialize', 'POST', {
+                policy: policy,
+                population: population
+            });
+            
+            // Reset charts for new model
+            simulator.resetCharts();
+            
+            // Wait a moment for initialization to complete
+            setTimeout(async () => {
+                await simulator.updateStatus();
+                await simulator.refreshCharts(false); // Full update for initialization
+                initBtn.textContent = 'Initialize Model';
+                initBtn.disabled = false;
+            }, 1000);
+            
+        } catch (error) {
             initBtn.textContent = 'Initialize Model';
             initBtn.disabled = false;
-        }, 1000);
-        
-    } catch (error) {
-        initBtn.textContent = 'Initialize Model';
-        initBtn.disabled = false;
-    }
+        }
+    });
 }
 
 async function stepModel() {
