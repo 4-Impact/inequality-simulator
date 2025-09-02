@@ -331,10 +331,10 @@ class WealthModel(mesa.Model):
         
         # Divide the wealth equally among all agents at the beginning of the time step
         elif self.policy=="equal wealth distribution": 
-            self.agents.shuffle_do("step")
             each_wealth = self.total/self.population
             for agent in self.agents: 
                 agent.wealth=each_wealth
+            self.agents.shuffle_do("step")
 
         elif self.policy=="innovation": 
             bins = start_up_required(self)
