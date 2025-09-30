@@ -362,7 +362,7 @@ class InequalitySimulator {
                     
                     if (this.mockData.model.policy === 'comparison') {
                         // Return comparison data structure
-                        const policies = ['econophysics', 'powerful leaders', 'equal wealth distribution', 'innovation'];
+                        const policies = ['econophysics', 'fascism', 'communism', 'capitalism'];
                         const comparisonData = {};
                         
                         policies.forEach(policy => {
@@ -1303,7 +1303,7 @@ class InequalitySimulator {
                 policies = Array(wealths.length).fill(status.policy || '—');
             } else if (isComparison) {
                 // Build arrays aligned per agent: wealths[] and policies[]
-                const order = ['econophysics', 'powerful leaders', 'equal wealth distribution', 'innovation'];
+                const order = ['econophysics', 'fascism', 'communism', 'capitalism'];
                 order.forEach(policy => {
                     const arr = wealthData[policy] || [];
                     arr.forEach(v => {

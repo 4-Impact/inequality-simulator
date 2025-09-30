@@ -583,9 +583,9 @@
                     </div>
                     <select id="policy-select">
                         <option value="econophysics" selected>Econophysics</option>
-                        <option value="powerful leaders">Powerful Leaders</option>
-                        <option value="equal wealth distribution">Equal Wealth Distribution</option>
-                        <option value="innovation">Innovation</option>
+                        <option value="fascism">Fascism</option>
+                        <option value="communism">Communism</option>
+                        <option value="capitalism">Capitalism</option>
                         <option value="comparison">Comparison</option>
                     </select>
                 </div>
@@ -717,10 +717,10 @@
                 <p>Intuitively one may think that each agent will retain the same amount of wealth, but instead an unequal distribution of wealth occurs. </p>
                 <p>Take a look at the population view and see how each policy impacts total wealth and other population level metrics.</p>`
             },
-            'powerful leaders': {
-                title: "Powerful Leaders Policy",
+            'fascism': {
+                title: "Fascism",
                 content: `<p>In this variation, a group of agents are picked as party elites. They then tax all the other agents.
-                    This can be thought of as a feudal system or fascist system, where those in power stay in power.</p>
+                    This can be thought of as a fascist system, where those in power stay in power.</p>
                 <p>How it works for each step:</p>
                 <ul>
                 <li> You get a payday and pay a survival cost based on the amount of wealth in the population. </li>
@@ -729,8 +729,8 @@
                 </ul>
                 <p> Notice at the population level, this inhibits total wealth growth.</p>`
             },
-            'equal wealth distribution': {
-                title: "Equal Wealth Distribution Policy",
+            'communism': {
+                title: "Communism",
                 content: 
                 `<p>In this variation, after each step all wealth is redistributed. This represents a communist ideal, 
                     where wealth can be perfectly distributed. (or can it?)</p>
@@ -743,10 +743,10 @@
                 <p> Notice at the population level, this inhibits total wealth growth.</p>`
 
             },
-            'innovation': {
-                title: "Innovation Policy",
-                content: `<p>In this variation, each agent has an innovation attribute. If an agent has enough wealth for an initial 
-                    start up (based on total population wealth), then they can then invest in a "new idea" and get a pay increase.
+            'capitalism': {
+                title: "Capitalism",
+                content: `<p>In the capitalism variation, each agent has an innovation attribute. If an agent has enough wealth for an initial 
+                    start up (amount needed to fund a start up is based on total population wealth), then they can then invest in a "new idea" and get a pay increase.
                     This pay increase, then degrades over time as the innovation becomes less relevant. (The innovation attribute can also
                     decrease pay because the agent's idea did not succeed)</p>
                 <p>How it works for each step:</p>
@@ -755,7 +755,7 @@
                 <li> You exchange wealth randomly - pick an agent give them one of your wealth. Sometimes people pick you and give you wealth.</li>
                 <li> If you have enough wealth, you "invest" in your ideas and can get a pay increase.</li>
                 </ul>
-                <p> Notice on the population level, sometimes econophysics generates more wealth, sometimes, innovation does.</p>`
+                <p> Notice on the population level, sometimes econophysics generates more population wealth, sometimes, capitalism does.</p>`
             },
             'comparison': {
                 title: "Comparison Mode",

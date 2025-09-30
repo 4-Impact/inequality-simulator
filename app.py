@@ -119,7 +119,7 @@ def get_wealth_distribution():
         if current_model.policy == "comparison" and hasattr(current_model, 'comparison_results') and current_model.comparison_results:
             # Return comparison data
             result = {}
-            policies = ["econophysics", "powerful leaders", "equal wealth distribution", "innovation"]
+            policies = ["econophysics", "fascism", "communism", "capitalism"]
             for policy in policies:
                 if policy in current_model.comparison_results:
                     result[policy] = current_model.comparison_results[policy]['final_wealth']
@@ -140,7 +140,7 @@ def get_mobility_data():
         # For comparison mode, return data from all policy models
         if current_model.policy == "comparison" and hasattr(current_model, 'comparison_models') and current_model.comparison_models:
             comparison_data = {}
-            policies = ["econophysics", "powerful leaders", "equal wealth distribution", "innovation"]
+            policies = ["econophysics", "fascism", "communism", "capitalism"]
             
             for policy in policies:
                 if policy in current_model.comparison_models:
@@ -180,7 +180,7 @@ def get_gini_data():
         if current_model.policy == "comparison" and hasattr(current_model, 'comparison_results') and current_model.comparison_results:
             # Return comparison data
             result = {}
-            policies = ["econophysics", "powerful leaders", "equal wealth distribution", "innovation"]
+            policies = ["econophysics", "fascism", "communism", "capitalism"]
             for policy in policies:
                 if policy in current_model.comparison_results:
                     result[policy] = current_model.comparison_results[policy]['gini']
@@ -205,7 +205,7 @@ def get_total_wealth_data():
         if current_model.policy == "comparison" and hasattr(current_model, 'comparison_results') and current_model.comparison_results:
             # Return comparison data
             result = {}
-            policies = ["econophysics", "powerful leaders", "equal wealth distribution", "innovation"]
+            policies = ["econophysics", "fascism", "communism", "capitalism"]
             for policy in policies:
                 if policy in current_model.comparison_results:
                     result[policy] = current_model.comparison_results[policy]['total']
