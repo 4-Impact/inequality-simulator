@@ -15,6 +15,8 @@ def compute_gini(model):
 def total_wealth(model): 
     return sum([agent.wealth for agent in model.agents])
 
+def compute_mobility(model):
+    return np.mean([agent.mobility for agent in model.agents])
 
 #######################################################################################################
 
@@ -91,21 +93,24 @@ class WealthAgent(mesa.Agent):
         #increase wealth by proportion - payday
         self.wealth += (self.W*self.wealth)
         
-        
+        # Agent pays a cost to survive
         if self.wealth > self.model.survival_cost and self.wealth > 0: 
             self.wealth -= self.model.survival_cost
         else: 
             self.wealth -= self.wealth
-        
-        if self.model.policy=="powerful leaders": 
+
+        # In fascism agents pay a 5% specialty take to party elites
+        if self.model.policy=="fascism": 
             party_elites = self.model.agents.select(lambda a: a.party_elite==True)
             #pay tax to the party_elite
             party_elite = self.random.choice(party_elites)
             party_elite.wealth += self.wealth*.05
             self.wealth -= self.wealth*.05
                         
+        # Identify exchange agent
         exchange_agent = self.random.choice(self.model.agents)
         
+        # Exchange wealth based on proportion of agent assigned in initialization
         if self.wealth >= 0 and exchange_agent is not None and exchange_agent is not self:
             exchange_agent.wealth += (exchange_agent.W*self.wealth)
             self.wealth -= (exchange_agent.W*self.wealth)      
@@ -128,11 +133,11 @@ class WealthAgent(mesa.Agent):
         # Calculate Bartholomew mobility ratio
         self.mobility = self.calculate_bartholomew_mobility()
         """
-                            INNOVATION
+                           CAPITALISM
         """
-           
-        if self.model.policy=="Innovation": 
-            if self.wealth > self.model.inital_captial: 
+
+        if self.model.policy=="Capitalism": 
+            if self.wealth > self.model.initial_capital: 
                 #increase payday by innovation
                 self.W*=self.I
                 #Value of innovation decreases over time
@@ -182,7 +187,7 @@ def start_up_required(model):
     
 class WealthModel(mesa.Model): 
     
-    def __init__(self, policy="econophysics", population=200, start_up_required = 1, seed=42):
+    def __init__(self, policy="econophysics", population=200, start_up_required = 1, patron=False, seed=42):
         
         super().__init__(seed=seed)
         self.policy = policy
@@ -193,17 +198,17 @@ class WealthModel(mesa.Model):
         self.each_wealth = 0
         self.brackets = [0.75,1.25]
         self.start_up_required = start_up_required
-        self.inital_capital = 1.5
+        self.initial_capital = 1.5
+        self.patron = patron
         self.comparison_results = None
         self.comparison_running = False
         self.comparison_steps = 50  # Default steps for comparison models
         self.comparison_models = {}  # Store individual policy models
         self.comparison_step_count = 0  # Track current step in comparison
-        
-        self.datacollector = mesa.DataCollector(model_reporters = {"Gini": compute_gini,"Total": total_wealth },
+        self.datacollector = mesa.DataCollector(model_reporters = {"Gini": compute_gini,"Total": total_wealth,
+                                                                   "Mobility": compute_mobility },
                                                agent_reporters={"Wealth":"wealth", "Bracket":"bracket","Pay":"W",
                                                                 "Mobility": "mobility"})
-        
         
         mean = 0.2      # mean of the distribution
         sigma = 0.05     # original sigma, so variance is 2*sigma^2
@@ -211,7 +216,6 @@ class WealthModel(mesa.Model):
 
         # Generate data points from the Gaussian distribution
         payday_array = np.random.normal(mean, np.sqrt(variance), self.population)
-        
         
         innovation_array =  np.random.pareto(2.5,size=self.population)
         
@@ -245,9 +249,10 @@ class WealthModel(mesa.Model):
     
     def initialize_comparison_models(self):
         """Initialize separate models for each policy"""
-        policies = ["econophysics", "powerful leaders", "equal wealth distribution", "innovation"]
+        policies = ["econophysics", "fascism", "communism", "capitalism"]
         self.comparison_models = {}
-        self.comparison_results = {policy: {'gini': [], 'total': [], 'final_wealth': [], 'final_classes': []} for policy in policies}
+        self.comparison_results = {policy: {'gini': [], 'total': [], 'final_wealth': [],
+                                            'final_classes': [], "mobility":[]} for policy in policies}
         self.comparison_step_count = 0
         
         for policy in policies:
@@ -262,9 +267,11 @@ class WealthModel(mesa.Model):
             # Collect initial data (step 0)
             gini = compute_gini(model)
             total = total_wealth(model)
+            mobility = compute_mobility(model)
             self.comparison_results[policy]['gini'].append(gini)
             self.comparison_results[policy]['total'].append(total)
-            
+            self.comparison_results[policy]['mobility'].append(mobility)
+
         print(f"Initialized comparison models with initial data")
     
     def step_comparison_models(self):
@@ -280,11 +287,13 @@ class WealthModel(mesa.Model):
             # Collect data
             gini = compute_gini(model)
             total = total_wealth(model)
-            
-            print(f"Step {self.comparison_step_count}, Policy: {policy}, Gini: {gini:.3f}, Total: {total:.2f}")
-            
+            mobility = compute_mobility(model)
+            print(f"Step {self.comparison_step_count}, Policy: {policy}, Gini: {gini:.3f}, "
+                  f"Mobility: {mobility:.3f}, Total: {total:.2f}")
+
             self.comparison_results[policy]['gini'].append(gini)
             self.comparison_results[policy]['total'].append(total)
+            self.comparison_results[policy]['mobility'].append(mobility)
         
         self.comparison_step_count += 1
         
@@ -325,18 +334,18 @@ class WealthModel(mesa.Model):
             self.agents.shuffle_do("step")
         
         # party_elites can only receive from subordinates but never give money
-        elif self.policy=="powerful leaders": 
+        elif self.policy=="fascism": 
             subordinates = self.agents.select(lambda a: a.party_elite==False)
             subordinates.shuffle_do("step")
         
         # Divide the wealth equally among all agents at the beginning of the time step
-        elif self.policy=="equal wealth distribution": 
-            self.agents.shuffle_do("step")
+        elif self.policy=="communism": 
             each_wealth = self.total/self.population
             for agent in self.agents: 
                 agent.wealth=each_wealth
+            self.agents.shuffle_do("step")
 
-        elif self.policy=="innovation": 
+        elif self.policy=="capitalism": 
             bins = start_up_required(self)
             if self.start_up_required==1: 
                 self.initial_capital = bins[0]
@@ -347,6 +356,26 @@ class WealthModel(mesa.Model):
                 self.initial_capital =bins[-1]
             self.agents.shuffle_do("step")
              
+        if self.patron:
+            # Identify the wealthiest 20% --in 200 thats 40.
+            top_count = max(1, int(self.population * 0.20))
+            top_agents = sorted(self.agents, key=lambda a: a.wealth, reverse=True)[:top_count]
+            top_set = set(top_agents)
+
+            # Build a pool that excludes all top agents (they cannot be sampled)
+            available_pool = [a for a in self.agents if a not in top_set]
+
+            for agent in top_agents:
+                # Take a random sample (their "network") from non-top agents only
+                sample_size = max(1, int(len(available_pool) * 0.3))
+                sample_size = min(sample_size, len(available_pool))
+                sample_agents = self.random.sample(available_pool, sample_size)
+                rando_agent = self.random.choice(sample_agents)
+                # Give an amount to the most innovative agent in the sample
+                transfer_amount = 0.10 * agent.wealth  # 10% of agent's wealth
+                #if agent.wealth > transfer_amount:
+                agent.wealth -= transfer_amount
+                rando_agent.wealth += transfer_amount
+
         self.datacollector.collect(self)
-        
-       
+
