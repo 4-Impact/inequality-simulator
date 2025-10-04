@@ -294,6 +294,52 @@
         /* Kill old grid layout if any leftover CSS references it */
         .charts-grid { display: none !important; }
 
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+            vertical-align: middle;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #4a5f7a;
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #3498db;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+
         @media (max-width: 768px) {
         .chart-carousel { padding: 10px 48px; }
         canvas { max-height: 360px; }
@@ -372,13 +418,16 @@
             justify-content: center;
             margin-bottom: 15px;
         }
-        
-        .parameter-header {
-            display: flex;
-            align-items: center;
-            margin-bottom: 5px;
+        /* Add a light-weight metrics line shown above charts (used for Mobility) */
+        .chart-metrics {
+            text-align: center;
+            color: #bdc3c7;
+            font-size: 14px;
+            margin: -6px 0 8px 0; /* tuck closer to header */
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
-        
         /* Modal Styles */
         .modal {
             display: none;
@@ -583,9 +632,9 @@
                     </div>
                     <select id="policy-select">
                         <option value="econophysics" selected>Econophysics</option>
-                        <option value="powerful leaders">Powerful Leaders</option>
-                        <option value="equal wealth distribution">Equal Wealth Distribution</option>
-                        <option value="innovation">Innovation</option>
+                        <option value="fascism">Fascism</option>
+                        <option value="communism">Communism</option>
+                        <option value="capitalism">Capitalism</option>
                         <option value="comparison">Comparison</option>
                     </select>
                 </div>
@@ -596,6 +645,17 @@
                         <button class="info-button" onclick="showInfoModal('population')">?</button>
                     </div>
                     <input type="number" id="population-input" value="200" min="50" max="1000">
+                </div>
+
+                <div class="control-group">
+                    <div class="parameter-header">
+                        <label for="patron-toggle">Patron Effect:</label>
+                        <button class="info-button" onclick="showInfoModal('patron')">?</button>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="patron-toggle">
+                        <span class="slider"></span>
+                    </label>
                 </div>
 
             </div>
@@ -678,6 +738,8 @@
                 <div class="chart-title">Economic Mobility</div>
                 <button class="info-button" onclick="showInfoModal('mobility')">?</button>
             </div>
+            <!-- Mobility metrics line (single or per-policy in comparison) -->
+            <div id="mobility-metrics" class="chart-metrics"> </div>
             <canvas id="mobility-chart"></canvas>
             </div>
         </div>
@@ -717,10 +779,10 @@
                 <p>Intuitively one may think that each agent will retain the same amount of wealth, but instead an unequal distribution of wealth occurs. </p>
                 <p>Take a look at the population view and see how each policy impacts total wealth and other population level metrics.</p>`
             },
-            'powerful leaders': {
-                title: "Powerful Leaders Policy",
+            'fascism': {
+                title: "Fascism",
                 content: `<p>In this variation, a group of agents are picked as party elites. They then tax all the other agents.
-                    This can be thought of as a feudal system or fascist system, where those in power stay in power.</p>
+                    This can be thought of as a fascist system, where those in power stay in power.</p>
                 <p>How it works for each step:</p>
                 <ul>
                 <li> You get a payday and pay a survival cost based on the amount of wealth in the population. </li>
@@ -729,8 +791,8 @@
                 </ul>
                 <p> Notice at the population level, this inhibits total wealth growth.</p>`
             },
-            'equal wealth distribution': {
-                title: "Equal Wealth Distribution Policy",
+            'communism': {
+                title: "Communism",
                 content: 
                 `<p>In this variation, after each step all wealth is redistributed. This represents a communist ideal, 
                     where wealth can be perfectly distributed. (or can it?)</p>
@@ -743,10 +805,10 @@
                 <p> Notice at the population level, this inhibits total wealth growth.</p>`
 
             },
-            'innovation': {
-                title: "Innovation Policy",
-                content: `<p>In this variation, each agent has an innovation attribute. If an agent has enough wealth for an initial 
-                    start up (based on total population wealth), then they can then invest in a "new idea" and get a pay increase.
+            'capitalism': {
+                title: "Capitalism",
+                content: `<p>In the capitalism variation, each agent has an innovation attribute. If an agent has enough wealth for an initial 
+                    start up (amount needed to fund a start up is based on total population wealth), then they can then invest in a "new idea" and get a pay increase.
                     This pay increase, then degrades over time as the innovation becomes less relevant. (The innovation attribute can also
                     decrease pay because the agent's idea did not succeed)</p>
                 <p>How it works for each step:</p>
@@ -755,7 +817,13 @@
                 <li> You exchange wealth randomly - pick an agent give them one of your wealth. Sometimes people pick you and give you wealth.</li>
                 <li> If you have enough wealth, you "invest" in your ideas and can get a pay increase.</li>
                 </ul>
-                <p> Notice on the population level, sometimes econophysics generates more wealth, sometimes, innovation does.</p>`
+                <p> Notice on the population level, sometimes econophysics generates more population wealth, sometimes, capitalism does.</p>`
+            },
+            'patron': {
+                title: "Patron Effect",
+                content: `<p>When enabled, the wealthiest 20% of agents (patrons) will support other agents.</p>
+                <p>In each step, the patron pulls form a random sample of the population and then transfer 10%
+                    of their wealth to a randomly selected agent.</p>`
             },
             'comparison': {
                 title: "Comparison Mode",
