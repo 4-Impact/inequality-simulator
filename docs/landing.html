@@ -294,6 +294,52 @@
         /* Kill old grid layout if any leftover CSS references it */
         .charts-grid { display: none !important; }
 
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+            vertical-align: middle;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #4a5f7a;
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #3498db;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+
         @media (max-width: 768px) {
         .chart-carousel { padding: 10px 48px; }
         canvas { max-height: 360px; }
@@ -372,13 +418,16 @@
             justify-content: center;
             margin-bottom: 15px;
         }
-        
-        .parameter-header {
-            display: flex;
-            align-items: center;
-            margin-bottom: 5px;
+        /* Add a light-weight metrics line shown above charts (used for Mobility) */
+        .chart-metrics {
+            text-align: center;
+            color: #bdc3c7;
+            font-size: 14px;
+            margin: -6px 0 8px 0; /* tuck closer to header */
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
-        
         /* Modal Styles */
         .modal {
             display: none;
@@ -598,6 +647,17 @@
                     <input type="number" id="population-input" value="200" min="50" max="1000">
                 </div>
 
+                <div class="control-group">
+                    <div class="parameter-header">
+                        <label for="patron-toggle">Patron Effect:</label>
+                        <button class="info-button" onclick="showInfoModal('patron')">?</button>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="patron-toggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
             </div>
 
             <div class="buttons-section">
@@ -678,6 +738,8 @@
                 <div class="chart-title">Economic Mobility</div>
                 <button class="info-button" onclick="showInfoModal('mobility')">?</button>
             </div>
+            <!-- Mobility metrics line (single or per-policy in comparison) -->
+            <div id="mobility-metrics" class="chart-metrics"> </div>
             <canvas id="mobility-chart"></canvas>
             </div>
         </div>
@@ -756,6 +818,12 @@
                 <li> If you have enough wealth, you "invest" in your ideas and can get a pay increase.</li>
                 </ul>
                 <p> Notice on the population level, sometimes econophysics generates more population wealth, sometimes, capitalism does.</p>`
+            },
+            'patron': {
+                title: "Patron Effect",
+                content: `<p>When enabled, the wealthiest 20% of agents (patrons) will support other agents.</p>
+                <p>In each step, the patron pulls form a random sample of the population and then transfer 10%
+                    of their wealth to a randomly selected agent.</p>`
             },
             'comparison': {
                 title: "Comparison Mode",

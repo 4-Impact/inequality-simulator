@@ -60,40 +60,51 @@ def static_files(filename):
     return send_from_directory('docs', filename)
 
 
+# ...existing code...
 @app.route('/api/initialize', methods=['POST'])
 def initialize_model():
     """Initialize a new model with given parameters"""
     try:
         global current_model
-        data = request.get_json()
-        
+        data = request.get_json(silent=True) or {}
+
         if not data:
             return jsonify({'error': 'No JSON data provided'}), 400
-            
-        policy = data.get('policy', 'econophysics')
-        population = data.get('population', 200)
-        start_up_required = data.get('start_up_required', 1)
-        
-        logger.info(f"Initializing model with policy={policy}, population={population}, start_up_required={start_up_required}")
-        
+
+        policy = str(data.get('policy', 'econophysics'))
+        population = int(data.get('population', 200))
+        start_up_required = int(data.get('start_up_required', 1))
+        patron = bool(data.get('patron', False))
+
+        logger.info(
+            "Initializing model with policy=%s, population=%s, start_up_required=%s, patron=%s",
+            policy, population, start_up_required, patron
+        )
+
         with model_lock:
             current_model = WealthModel(
                 policy=policy,
                 population=population,
                 start_up_required=start_up_required,
-                seed=42
+                patron=patron,
+                seed=42,
             )
-            
             # Set default comparison steps for comparison models
-            if policy == "comparison":
-                current_model.set_comparison_steps(50)  # Default, will be updated when run is called
-        
-        logger.info("Model initialized successfully")
-        return jsonify({'status': 'success', 'message': 'Model initialized'})
-        
+            # ...existing code...
+
+        return jsonify({
+            'status': 'initialized',
+            'policy': policy,
+            'population': population
+        }), 200
+
+    except (TypeError, ValueError) as e:
+        logger.exception("Invalid parameters for initialize_model")
+        return jsonify({'error': 'Invalid parameters', 'details': str(e)}), 400
     except Exception as e:
-        logger.error(f"Error initializing model: {str(e)}")
-        return jsonify({'error': f'Failed to initialize model: {str(e)}'}), 500
+        logger.exception("Failed to initialize model")
+        return jsonify({'error': 'Initialization failed', 'details': str(e)}), 500
+# ...existing code...
 
 @app.route('/api/step', methods=['POST'])
 def step_model():

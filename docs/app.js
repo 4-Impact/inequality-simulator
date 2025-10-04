@@ -1462,21 +1462,23 @@ document.addEventListener('DOMContentLoaded', function() {
 async function initializeModel() {
     const policy = document.getElementById('policy-select').value;
     const population = parseInt(document.getElementById('population-input').value);
-    
+    const patron = document.getElementById('patron-toggle').checked; // Get patron toggle state
+
     showInfoModal(policy, async () => {
         const initBtn = document.getElementById('initialize-btn');
         initBtn.disabled = true;
         initBtn.textContent = 'Initializing...';
-    
+
         try {
             await simulator.apiCall('/initialize', 'POST', {
                 policy: policy,
-                population: population
+                population: population,
+                patron: patron // Pass patron state to the backend
             });
-            
+
             // Reset charts for new model
             simulator.resetCharts();
-            
+
             // Wait a moment for initialization to complete
             setTimeout(async () => {
                 await simulator.updateStatus();
@@ -1484,7 +1486,7 @@ async function initializeModel() {
                 initBtn.textContent = 'Initialize Model';
                 initBtn.disabled = false;
             }, 1000);
-            
+
         } catch (error) {
             initBtn.textContent = 'Initialize Model';
             initBtn.disabled = false;
