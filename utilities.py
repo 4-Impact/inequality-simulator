@@ -7,6 +7,45 @@ Adapted from Wealth Condensation in a Simple Model of the Economy
 """
 import numpy as np 
 
+
+#====================== Agent Utilities====================================#
+
+def calculate_bartholomew_mobility(agent):
+        """
+        Calculate Bartholomew mobility ratio:
+        Expected absolute change in position divided by maximum possible change
+        """
+        if len(agent.bracket_history) < 2:
+            return 0.0
+        
+        # Map brackets to numerical positions (0=Lower, 1=Middle, 2=Upper)
+        bracket_to_position = {"Lower": 0, "Middle": 1, "Upper": 2}
+        
+        positions = [bracket_to_position[bracket] for bracket in agent.bracket_history]
+        
+        # Calculate absolute changes between consecutive time periods
+        absolute_changes = []
+        for i in range(1, len(positions)):
+            absolute_changes.append(abs(positions[i] - positions[i-1]))
+        
+        if not absolute_changes:
+            return 0.0
+            
+        # Expected absolute change (mean of absolute changes)
+        expected_absolute_change = sum(absolute_changes) / len(absolute_changes)
+        
+        # Maximum possible change (from lowest to highest position or vice versa)
+        max_possible_change = 2.0  # From Lower (0) to Upper (2) or vice versa
+        
+        # Bartholomew mobility ratio
+        if max_possible_change == 0:
+            return 0.0
+        
+        mobility_ratio = expected_absolute_change / max_possible_change
+        
+        # Ensure the ratio is between 0 and 1
+        return max(0.0, min(1.0, mobility_ratio))
+
 def calc_brackets(model): 
         wealth_data = [agent.wealth for agent in model.agents]
 
@@ -49,22 +88,4 @@ def calculate_churn(model):
         totals["Lower"]=0
     return [moving_up, moving_down, totals]
                                         
-                
-def number_to_words(n):
-    # Define thresholds and corresponding words, adding "Trillion"
-    thresholds = [
-        (1_000_000_000_000, 'Trillion'),
-        (1_000_000_000, 'Billion'),
-        (1_000_000, 'Million'),
-        (1_000, 'Thousand')
-    ]
-    
-    # Loop through thresholds to determine appropriate scale
-    for threshold, word in thresholds:
-        if n >= threshold:
-            value = n / threshold
-            return f"{int(value)} {word}"
-    
-    # If less than 1000, just return the number as a string
-    return str(n)   
     
