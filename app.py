@@ -60,7 +60,6 @@ def static_files(filename):
     return send_from_directory('docs', filename)
 
 
-# ...existing code...
 @app.route('/api/initialize', methods=['POST'])
 def initialize_model():
     """Initialize a new model with given parameters"""
@@ -90,7 +89,6 @@ def initialize_model():
                 seed=42,
             )
             # Set default comparison steps for comparison models
-            # ...existing code...
 
         return jsonify({
             'status': 'initialized',
