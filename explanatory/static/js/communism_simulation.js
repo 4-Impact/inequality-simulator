@@ -9,7 +9,7 @@ const MEAN_W = 0.2;
 const SIGMA_W = 0.05;
 
 const MODEL_SCALE = 0.05; 
-const BALL_SCALE = 30.0; 
+const BALL_SCALE = 20.0; 
 
 // --- Scene Setup ---
 const scene = new THREE.Scene();
@@ -72,21 +72,18 @@ function createTextSprite(message, color = 'white', fontSize = 60) {
     ctx.fillText(message, 128, 64);
     
     const texture = new THREE.CanvasTexture(canvas);
-    // UPDATED: depthTest: false ensures text always shows ON TOP of the ball
     const material = new THREE.SpriteMaterial({ map: texture, depthTest: false });
     const sprite = new THREE.Sprite(material);
     sprite.scale.set(3, 1.5, 1);
     return sprite;
 }
 
-// Helper: Load FBX with Promise
 function loadFBX(path) {
     return new Promise((resolve, reject) => {
         loader.load(path, (obj) => resolve(obj), undefined, (err) => reject(err));
     });
 }
 
-// Helper: Load Animation Clip Only
 function loadAnimationClip(path) {
     return new Promise((resolve) => {
         loader.load(path, (object) => {
@@ -99,7 +96,6 @@ function loadAnimationClip(path) {
     });
 }
 
-// Helper: Recursive Bone Finder
 function findHandBone(object) {
     let foundBone = null;
     object.traverse((node) => {
@@ -125,7 +121,6 @@ class Agent {
         this.activeAction = null;
         this.rightHandBone = null;
         
-        // Container
         this.mesh = new THREE.Group();
         this.mesh.position.set(x, 0, z);
         this.mesh.lookAt(0, 0, 0); 
@@ -139,11 +134,9 @@ class Agent {
         const catchPath = `/static/assets/${charName}-catching.fbx`;
         
         try {
-            // 1. Load Base Model
             const model = await loadFBX(basePath);
             model.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
             
-            // Enable Shadows & Find Bone
             model.traverse((node) => {
                 if (node.isMesh) {
                     node.castShadow = true;
@@ -152,14 +145,12 @@ class Agent {
             });
             
             this.rightHandBone = findHandBone(model);
-            if (!this.rightHandBone) console.warn(`Agent ${this.id}: Right Hand Bone NOT found! Ball will attach to feet.`);
+            if (!this.rightHandBone) console.warn(`Agent ${this.id}: Right Hand Bone NOT found!`);
 
             this.mesh.add(model);
             
-            // 2. Setup Animations
             this.mixer = new THREE.AnimationMixer(model);
             
-            // Idle
             if (model.animations.length > 0) {
                 const idle = this.mixer.clipAction(model.animations[0]);
                 idle.play();
@@ -167,7 +158,6 @@ class Agent {
                 this.activeAction = idle;
             }
 
-            // Throw
             const throwClip = await loadAnimationClip(throwPath);
             if (throwClip) {
                 const act = this.mixer.clipAction(throwClip);
@@ -176,7 +166,6 @@ class Agent {
                 this.actions['throw'] = act;
             }
 
-            // Catch
             const catchClip = await loadAnimationClip(catchPath);
             if (catchClip) {
                 const act = this.mixer.clipAction(catchClip);
@@ -260,21 +249,16 @@ for (let i = 0; i < AGENT_COUNT; i++) {
     agents.push(new Agent(i, pos.x, pos.z, typeIndex));
 }
 
-// --- Animation Transfer Logic ---
+// --- Animation Functions ---
 function animateTransfer(fromAgent, toAgent, amount, color, duration = 1200) {
-    // 1. Orient
     fromAgent.lookAt(toAgent.mesh.position);
     toAgent.lookAt(fromAgent.mesh.position);
 
-    // 2. Trigger Animations
     fromAgent.playThrow(); 
-    // Trigger catch slightly earlier so hand is ready
     setTimeout(() => { toAgent.playCatch(); }, duration * 0.4); 
 
-    // 3. Handle The Ball
     return new Promise(resolve => {
         let ball;
-        
         if (crystalBallModel) {
             ball = crystalBallModel.clone();
             ball.scale.set(BALL_SCALE, BALL_SCALE, BALL_SCALE);
@@ -285,13 +269,10 @@ function animateTransfer(fromAgent, toAgent, amount, color, duration = 1200) {
         }
 
         const textSprite = createTextSprite(amount.toFixed(2), color, 40);
-        textSprite.scale.set(4.0, 2.75, 3.5); 
-        // Position it higher so it's clearly "above" the ball
+        textSprite.scale.set(2.5, 1.25, 1); 
         textSprite.position.set(0, 1.2, 0); 
-        // Note: createTextSprite now has depthTest:false, so it will always render on top
         ball.add(textSprite);
 
-        // --- PHASE 1: ATTACH TO THROWER HAND ---
         if (fromAgent.rightHandBone) {
             fromAgent.rightHandBone.add(ball);
             ball.position.set(0, 0, 0); 
@@ -300,17 +281,11 @@ function animateTransfer(fromAgent, toAgent, amount, color, duration = 1200) {
             ball.position.set(0, 1.5, 0.5); 
         }
 
-        const releaseTime = 400; // ms
+        const releaseTime = 400; 
 
-        // --- PHASE 2: THROW (DETACH & FLY) ---
         setTimeout(() => {
-            // Detach from hand, attach to Scene
             scene.attach(ball);
-
             const startPos = ball.position.clone();
-            
-            // UPDATED: Dynamic Target Tracking
-            // We do NOT calculate targetPos once. We calculate it every frame inside flyLoop
             
             let startTime = null;
             function flyLoop(time) {
@@ -319,7 +294,6 @@ function animateTransfer(fromAgent, toAgent, amount, color, duration = 1200) {
                 const progress = (time - startTime) / flightDuration;
 
                 if (progress < 1) {
-                    // 1. Get CURRENT target position (Homing Missile Logic)
                     const currentTarget = new THREE.Vector3();
                     if (toAgent.rightHandBone) {
                         toAgent.rightHandBone.getWorldPosition(currentTarget);
@@ -327,18 +301,12 @@ function animateTransfer(fromAgent, toAgent, amount, color, duration = 1200) {
                         currentTarget.copy(toAgent.mesh.position).add(new THREE.Vector3(0, 1.5, 0));
                     }
 
-                    // 2. Interpolate
                     const currentPos = new THREE.Vector3().lerpVectors(startPos, currentTarget, progress);
-                    
-                    // 3. Add Arc (Parabola)
-                    // We fade the arc out as progress -> 1 so it lands exactly on target
                     currentPos.y += Math.sin(progress * Math.PI) * 3.0;
                     
                     ball.position.copy(currentPos);
                     requestAnimationFrame(flyLoop);
                 } else {
-                    // --- PHASE 3: CATCH ---
-                    // Snap exactly to the hand bone
                     if (toAgent.rightHandBone) {
                         toAgent.rightHandBone.add(ball);
                         ball.position.set(0,0,0);
@@ -387,12 +355,10 @@ async function initAndRun() {
     stepInfo.innerHTML = "Loading Assets...";
 
     try {
-        // 1. Load Ball
         try {
             crystalBallModel = await loadFBX('/static/assets/Pouch.fbx');
             crystalBallModel.traverse((node) => {
                 if (node.isMesh) {
-                    // Ensure it looks like a crystal ball
                     node.material = new THREE.MeshStandardMaterial({
                         //color: 0xa52a2a,
                         //emissive: 0x112244,
@@ -403,16 +369,14 @@ async function initAndRun() {
                     });
                 }
             });
-            console.log("Crystal Ball loaded.");
         } catch (e) {
-            console.warn("Crystal Ball failed to load. Using fallback sphere.");
+            console.warn("Crystal Ball failed to load.");
         }
         
-        // 2. Load Agents
         const loadPromises = agents.map(agent => agent.load());
         await Promise.all(loadPromises);
         
-        stepInfo.innerHTML = "Starting Simulation...";
+        stepInfo.innerHTML = "Starting Communism Simulation...";
         runSimulation();
 
     } catch (err) {
@@ -429,14 +393,14 @@ async function runSimulation() {
     for (let i = 0; i < agents.length; i++) {
         const agent = agents[i];
         
-        // Income
+        // 1. Payday
         const income = agent.wealth * agent.W;
         agent.wealth += income;
         agent.updateLabel();
         stepInfo.innerHTML = `Agent ${i + 1}: Payday (+${income.toFixed(2)})`;
         await animateFloatingText(agent, `+${income.toFixed(2)}`, '#4caf50', 800);
 
-        // Survival
+        // 2. Survival
         const allWealths = agents.map(a => a.wealth);
         const expScale = allWealths.reduce((a, b) => a + b, 0) / allWealths.length;
         let survivalCost = 0;
@@ -464,7 +428,7 @@ async function runSimulation() {
         agent.updateLabel();
         target.updateLabel();
 
-        // Thrive
+        // 3. Thrive
         stepInfo.innerHTML = `Agent ${i + 1}: Thrive Exchange`;
         
         let thriveIdx;
@@ -484,11 +448,34 @@ async function runSimulation() {
             stepInfo.innerHTML = `Agent ${i + 1}: Skip Thrive`;
             await new Promise(r => setTimeout(r, 500));
         }
+        
+        // --- STEP 4: INSTANT REDISTRIBUTION (Inside Loop) ---
+        stepInfo.innerHTML = "Redistributing Wealth...";
+        
+        // Calculate Average of CURRENT state
+        const totalWealth = agents.reduce((sum, a) => sum + a.wealth, 0);
+        const avgWealth = totalWealth / AGENT_COUNT;
 
-        await new Promise(r => setTimeout(r, 500));
+        // Apply immediately
+        for (let a of agents) {
+            const diff = avgWealth - a.wealth;
+            a.wealth = avgWealth;
+            a.updateLabel();
+
+            // Quick visual flash of change
+            if (Math.abs(diff) > 0.05) {
+                const color = diff > 0 ? '#4caf50' : '#ff5252';
+                const sign = diff > 0 ? '+' : '';
+                animateFloatingText(a, `${sign}${diff.toFixed(2)}`, color, 1000);
+            }
+        }
+        
+        // Small pause to let the redistribution sink in before next agent starts
+        await new Promise(r => setTimeout(r, 1200));
     }
+
     stepInfo.innerHTML = "Round Complete";
-    setTimeout(runSimulation, 2000);
+    setTimeout(runSimulation, 1000);
 }
 
 initAndRun();
@@ -507,4 +494,3 @@ window.addEventListener('resize', () => {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
-// Crystal Ball by CreativeTechLab [CC-BY] via Poly Pizza
