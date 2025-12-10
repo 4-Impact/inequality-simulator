@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Inequality Simulator - Logic Visualization</title>
+  <script src="https://unpkg.com/blockly/blockly.min.js"></script>
+  <script src="custom_blocks.js"></script>
+  <style>
+    body {
+      background-color: #1a1a1a;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    h1 {
+      padding: 10px 20px;
+      margin: 0;
+      background-color: #2c3e50;
+      font-size: 1.2rem;
+    }
+    #blocklyDiv {
+      flex-grow: 1;
+      width: 100%;
+    }
+    .info {
+        padding: 10px 20px;
+        font-size: 0.9rem;
+        color: #bdc3c7;
+        background-color: #34495e;
+    }
+  </style>
+</head>
+<body>
+  <h1>Inequality Simulator Logic Model</h1>
+  <div class="info">This visual representation maps directly to the logic in <code>model.py</code> and <code>agent.py</code>.</div>
+  <div id="blocklyDiv"></div>
+
+  <xml xmlns="https://developers.google.com/blockly/xml" id="toolbox" style="display: none">
+    <category name="Model Logic" colour="230">
+      <block type="model_step_def"></block>
+      <block type="calc_metrics"></block>
+      <block type="calc_survival"></block>
+      <block type="agent_loop"></block>
+      <block type="collect_data"></block>
+    </category>
+    <category name="Agent Logic" colour="120">
+      <block type="agent_step_def"></block>
+      <block type="update_history"></block>
+      <block type="calc_agent_metrics"></block>
+    </category>
+    <category name="Policies" colour="0">
+      <block type="execute_wealth_exchange"></block>
+      <block type="execute_fascism"></block>
+      <block type="execute_capitalism"></block>
+      <block type="execute_communism"></block>
+      <block type="execute_patron"></block>
+      <block type="calc_startup_capital"></block>
+    </category>
+    <category name="Control" colour="210">
+      <block type="check_policy"></block>
+      <block type="policy_config_check"></block>
+      <block type="check_elite"></block>
+    </category>
+  </xml>
+
+  <script>
+    var workspace = Blockly.inject('blocklyDiv', {
+      media: 'https://unpkg.com/blockly/media/',
+      toolbox: document.getElementById('toolbox'),
+      scrollbars: true,
+      zoom: {
+        controls: true,
+        wheel: true,
+        startScale: 0.8,
+        maxScale: 3,
+        minScale: 0.3,
+        scaleSpeed: 1.2
+      },
+      theme: Blockly.Themes.Dark
+    });
+
+    // XML representing the current Python code logic
+    var startXml = `
+    <xml xmlns="https://developers.google.com/blockly/xml">
+      <block type="model_step_def" x="50" y="50">
+        <statement name="STEPS">
+          <block type="calc_metrics">
+            <next>
+              <block type="calc_survival">
+                <next>
+                  <block type="policy_config_check">
+                    <field name="OPTION">capitalism</field>
+                    <statement name="DO">
+                      <block type="calc_startup_capital"></block>
+                    </statement>
+                    <next>
+                      <block type="policy_config_check">
+                        <field name="OPTION">patron</field>
+                        <statement name="DO">
+                          <block type="execute_patron"></block>
+                        </statement>
+                        <next>
+                          <block type="agent_loop">
+                            <next>
+                              <block type="collect_data"></block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+      </block>
+
+      <block type="agent_step_def" x="600" y="50">
+        <statement name="STEPS">
+          <block type="update_history">
+            <next>
+              <block type="check_policy">
+                <field name="OPTION">fascism</field>
+                <statement name="DO">
+                  <block type="execute_fascism">
+                    <next>
+                      <block type="check_elite">
+                        <statement name="DO">
+                          <block type="execute_wealth_exchange"></block>
+                        </statement>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <next>
+                  <block type="check_policy">
+                    <field name="OPTION">capitalism</field>
+                    <statement name="DO">
+                      <block type="execute_capitalism">
+                        <next>
+                          <block type="execute_wealth_exchange"></block>
+                        </next>
+                      </block>
+                    </statement>
+                    <next>
+                      <block type="check_policy">
+                        <field name="OPTION">communism</field>
+                        <statement name="DO">
+                          <block type="execute_communism">
+                            <next>
+                              <block type="execute_wealth_exchange"></block>
+                            </next>
+                          </block>
+                        </statement>
+                        <next>
+                          <block type="check_policy">
+                            <field name="OPTION">econophysics</field>
+                            <statement name="DO">
+                              <block type="execute_wealth_exchange"></block>
+                            </statement>
+                            <next>
+                              <block type="calc_agent_metrics"></block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+      </block>
+    </xml>
+    `;
+
+    Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(startXml), workspace);
+  </script>
+
+  <script src="https://unpkg.com/blockly/python_compressed.js"></script>
+<script src="python_generators.js"></script>
+
+<div style="background: #34495e; padding: 10px;">
+    <button onclick="generateAndSave()" style="padding: 8px 16px; background: #27ae60; color: white; border: none; cursor: pointer;">
+        Update agent.py
+    </button>
+    <pre id="codeDisplay" style="color: #ccc; background: #222; padding: 10px; display: none;"></pre>
+</div>
+
+<script>
+    function generateAndSave() {
+        // 1. Generate Python Code from Blocks
+        var code = Blockly.Python.workspaceToCode(workspace);
+        
+        // Indent the code to fit inside the Agent class structure
+        // The generator produces "def step(self): ..."
+        // We need to ensure indentation matches the file structure if we insert it partially,
+        // but for simplicity, we often generate the *whole method* and let the backend insert it.
+        
+        console.log(code); // For debugging
+        document.getElementById('codeDisplay').style.display = 'block';
+        document.getElementById('codeDisplay').innerText = code;
+
+        // 2. Send to Backend
+        fetch('/api/update_code', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                filename: 'agent.py',
+                code: code
+            })
+        })
+        .then(response => response.json())
+        .then(data => alert('Code updated! Server restarting...'))
+        .catch(err => alert('Error updating code: ' + err));
+    }
+</script>
+</body>
+</html>

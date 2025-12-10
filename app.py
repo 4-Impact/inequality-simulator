@@ -12,6 +12,7 @@ import threading
 import time
 import logging
 import os
+import re
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -266,6 +267,64 @@ def api_info():
             '/api/data/total-wealth'
         ]
     })
+
+#-----------------BLOCKLY SECTION-------------------------------------------#
+@app.route('/blockly/')
+def blockly_home():
+    """Serve the Blockly visualization page"""
+    return send_from_directory('blockly', 'index.html')
+
+@app.route('/blockly/<path:filename>')
+def blockly_files(filename):
+    """Serve static files for Blockly"""
+    return send_from_directory('blockly', filename)
+
+@app.route('/api/update_code', methods=['POST'])
+def update_code():
+    """Receives Python code from Blockly and updates the target file"""
+    data = request.get_json()
+    filename = data.get('filename')
+    new_code = data.get('code')
+    
+    # Security check: limit to specific files
+    allowed_files = ['agent.py', 'model.py', 'policyblocks.py']
+    if filename not in allowed_files:
+        return jsonify({'error': 'File not allowed'}), 403
+
+    try:
+        # Read the current file
+        with open(filename, 'r') as f:
+            content = f.read()
+
+        # LOGIC INJECTION STRATEGY
+        # For agent.py, we want to replace the 'step' method.
+        # This regex finds "def step(self):" and replaces the indented block below it.
+        # Note: A simple full-file overwrite is easier if you model the WHOLE file in blocks.
+        # Below is a simplified "Append/Replace" approach or strict overwrite if blocks cover the full file.
+        
+        # Simple Approach: If blocks define the 'step' method, we can try to inject it.
+        # However, accurate Python injection is complex. 
+        # A safer "Toy" approach is to save the blockly output to a separate logic file 
+        # (e.g., 'blockly_logic.py') and have agent.py import it.
+        
+        # WRITING TO A SEPARATE LOGIC FILE (Recommended for safety)
+        with open('custom_logic.py', 'w') as f:
+             f.write("from policyblocks import *\nfrom utilities import *\n\n")
+             f.write("class CustomLogic:\n")
+             # Indent the blockly code to be inside the class
+             for line in new_code.splitlines():
+                 f.write("    " + line + "\n")
+        
+        # Then, modify agent.py ONE TIME to use this:
+        # from custom_logic import CustomLogic
+        # ...
+        # def step(self):
+        #     CustomLogic().step(self)
+        
+        return jsonify({'status': 'success', 'message': 'Logic updated in custom_logic.py'}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     try:
