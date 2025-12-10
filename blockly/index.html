@@ -82,6 +82,18 @@
       theme: Blockly.Themes.Dark
     });
 
+    <div style="background: #34495e; padding: 10px; display: flex; align-items: center; gap: 10px;">
+        <button onclick="generateAndSave()" style="padding: 10px 20px; background: #27ae60; color: white; border: none; cursor: pointer; font-weight: bold; border-radius: 4px;">
+            Update Simulation Logic
+        </button>
+        
+        <button onclick="resetLogic()" style="padding: 10px 20px; background: #e67e22; color: white; border: none; cursor: pointer; font-weight: bold; border-radius: 4px;">
+            Reset to Default
+        </button>
+        
+        <span id="saveStatus" style="color: #bdc3c7; font-size: 0.9em;"></span>
+    </div>
+
     // XML representing the current Python code logic
     var startXml = `
     <xml xmlns="https://developers.google.com/blockly/xml">
@@ -181,44 +193,5 @@
 
     Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(startXml), workspace);
   </script>
-
-  <script src="https://unpkg.com/blockly/python_compressed.js"></script>
-<script src="python_generators.js"></script>
-
-<div style="background: #34495e; padding: 10px;">
-    <button onclick="generateAndSave()" style="padding: 8px 16px; background: #27ae60; color: white; border: none; cursor: pointer;">
-        Update agent.py
-    </button>
-    <pre id="codeDisplay" style="color: #ccc; background: #222; padding: 10px; display: none;"></pre>
-</div>
-
-<script>
-    function generateAndSave() {
-        // 1. Generate Python Code from Blocks
-        var code = Blockly.Python.workspaceToCode(workspace);
-        
-        // Indent the code to fit inside the Agent class structure
-        // The generator produces "def step(self): ..."
-        // We need to ensure indentation matches the file structure if we insert it partially,
-        // but for simplicity, we often generate the *whole method* and let the backend insert it.
-        
-        console.log(code); // For debugging
-        document.getElementById('codeDisplay').style.display = 'block';
-        document.getElementById('codeDisplay').innerText = code;
-
-        // 2. Send to Backend
-        fetch('/api/update_code', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                filename: 'agent.py',
-                code: code
-            })
-        })
-        .then(response => response.json())
-        .then(data => alert('Code updated! Server restarting...'))
-        .catch(err => alert('Error updating code: ' + err));
-    }
-</script>
 </body>
 </html>

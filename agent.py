@@ -1,5 +1,7 @@
 import mesa
+import importlib
 
+import user_logic
 from policyblocks import (WealthExchange, Fascism, Capitalism, Communism)
 from utilities import calculate_bartholomew_mobility
 
@@ -20,38 +22,49 @@ class WealthAgent(mesa.Agent):
 
     def step(self):
         
-        # Update bracket 
-        self.previous = self.bracket
+        try:
+            importlib.reload(user_logic)
+        except Exception:
+            pass # Fail silently if file issues, fall back to default
 
-        if self.model.policy== "fascism": 
-            Fascism().execute(self)
-            if self.party_elite==False: 
+        # 2. Check if Custom Logic is Active
+        if getattr(user_logic, 'HAS_CUSTOM_LOGIC', False):
+            # --- USE CUSTOM BLOCKLY LOGIC ---
+            user_logic.step(self)
+
+        else:
+            # Update bracket 
+            self.previous = self.bracket
+
+            if self.model.policy== "fascism": 
+                Fascism().execute(self)
+                if self.party_elite==False: 
+                    WealthExchange().execute(self)
+            elif self.model.policy == "capitalism":
+                Capitalism().execute(self)
                 WealthExchange().execute(self)
-        elif self.model.policy == "capitalism":
-            Capitalism().execute(self)
-            WealthExchange().execute(self)
-        elif self.model.policy == "communism": 
-            Communism().execute(self.model)
-            WealthExchange().execute(self)
-        else: 
-            WealthExchange().execute(self)
+            elif self.model.policy == "communism": 
+                Communism().execute(self.model)
+                WealthExchange().execute(self)
+            else: 
+                WealthExchange().execute(self)
 
-        #calculate bracket
-        if self.wealth < self.model.brackets[0]:
-            self.bracket = "Lower"
-        elif self.wealth >= self.model.brackets[1]:
-            self.bracket = "Upper"
-        else: 
-            self.bracket = "Middle"
+            #calculate bracket
+            if self.wealth < self.model.brackets[0]:
+                self.bracket = "Lower"
+            elif self.wealth >= self.model.brackets[1]:
+                self.bracket = "Upper"
+            else: 
+                self.bracket = "Middle"
 
-        # Update bracket history and mobility calculation
-        self.bracket_history.append(self.bracket)
-        
-        # Keep only recent history to prevent memory bloat (last 20 steps)
-        if len(self.bracket_history) > 20:
-            self.bracket_history = self.bracket_history[-20:]
-        
-        # Calculate Bartholomew mobility ratio
-        self.mobility = calculate_bartholomew_mobility(self)
+            # Update bracket history and mobility calculation
+            self.bracket_history.append(self.bracket)
+            
+            # Keep only recent history to prevent memory bloat (last 20 steps)
+            if len(self.bracket_history) > 20:
+                self.bracket_history = self.bracket_history[-20:]
+            
+            # Calculate Bartholomew mobility ratio
+            self.mobility = calculate_bartholomew_mobility(self)
 
     

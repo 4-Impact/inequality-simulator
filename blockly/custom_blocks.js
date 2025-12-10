@@ -21,7 +21,7 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     "type": "calc_metrics",
-    "message0": "Calculate Metrics (Brackets, Total Wealth)",
+    "message0": "Calculate Metrics (Wealth Classes, Total Wealth)",
     "previousStatement": null,
     "nextStatement": null,
     "colour": BLOCK_COLOR_MODEL,
@@ -43,6 +43,7 @@ Blockly.defineBlocksWithJsonArray([
     "args0": [
       {
         "type": "field_dropdown",
+        "name": "OPTION",
         "options": [
           ["Capitalism", "capitalism"],
           ["Patron System", "patron"]
@@ -121,11 +122,12 @@ Blockly.defineBlocksWithJsonArray([
     "args0": [
       {
         "type": "field_dropdown",
+        "name": "OPTION",
         "options": [
           ["Fascism", "fascism"],
           ["Capitalism", "capitalism"],
           ["Communism", "communism"],
-          ["Econophysics (Default)", "econophysics"]
+          ["Econophysics", "econophysics"]
         ]
       }
     ],

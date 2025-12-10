@@ -89,7 +89,6 @@ def initialize_model():
                 patron=patron,
                 seed=42,
             )
-            # Set default comparison steps for comparison models
 
         return jsonify({
             'status': 'initialized',
@@ -103,7 +102,6 @@ def initialize_model():
     except Exception as e:
         logger.exception("Failed to initialize model")
         return jsonify({'error': 'Initialization failed', 'details': str(e)}), 500
-# ...existing code...
 
 @app.route('/api/step', methods=['POST'])
 def step_model():
@@ -279,52 +277,38 @@ def blockly_files(filename):
     """Serve static files for Blockly"""
     return send_from_directory('blockly', filename)
 
-@app.route('/api/update_code', methods=['POST'])
-def update_code():
-    """Receives Python code from Blockly and updates the target file"""
-    data = request.get_json()
-    filename = data.get('filename')
-    new_code = data.get('code')
-    
-    # Security check: limit to specific files
-    allowed_files = ['agent.py', 'model.py', 'policyblocks.py']
-    if filename not in allowed_files:
-        return jsonify({'error': 'File not allowed'}), 403
-
+# --- ADD THIS NEW ROUTE ---
+@app.route('/api/reset_code', methods=['POST'])
+def reset_code():
+    """Resets custom_logic.py to default state (disabling it)"""
     try:
-        # Read the current file
-        with open(filename, 'r') as f:
-            content = f.read()
-
-        # LOGIC INJECTION STRATEGY
-        # For agent.py, we want to replace the 'step' method.
-        # This regex finds "def step(self):" and replaces the indented block below it.
-        # Note: A simple full-file overwrite is easier if you model the WHOLE file in blocks.
-        # Below is a simplified "Append/Replace" approach or strict overwrite if blocks cover the full file.
-        
-        # Simple Approach: If blocks define the 'step' method, we can try to inject it.
-        # However, accurate Python injection is complex. 
-        # A safer "Toy" approach is to save the blockly output to a separate logic file 
-        # (e.g., 'blockly_logic.py') and have agent.py import it.
-        
-        # WRITING TO A SEPARATE LOGIC FILE (Recommended for safety)
+        default_content = "HAS_CUSTOM_LOGIC = False\n\ndef step(self):\n    pass\n"
         with open('custom_logic.py', 'w') as f:
-             f.write("from policyblocks import *\nfrom utilities import *\n\n")
-             f.write("class CustomLogic:\n")
-             # Indent the blockly code to be inside the class
-             for line in new_code.splitlines():
-                 f.write("    " + line + "\n")
-        
-        # Then, modify agent.py ONE TIME to use this:
-        # from custom_logic import CustomLogic
-        # ...
-        # def step(self):
-        #     CustomLogic().step(self)
-        
-        return jsonify({'status': 'success', 'message': 'Logic updated in custom_logic.py'}), 200
-
+            f.write(default_content)
+        return jsonify({'status': 'success', 'message': 'Logic reset to default.'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# --- MODIFY THE EXISTING UPDATE ROUTE ---
+@app.route('/api/update_code', methods=['POST'])
+def update_code():
+    """Receives Python code from Blockly and overwrites custom_logic.py"""
+    try:
+        data = request.get_json()
+        raw_code = data.get('code')
+        
+        # Inject the Active Flag = True
+        file_content = "HAS_CUSTOM_LOGIC = True\n\nfrom policyblocks import *\nfrom utilities import *\n\n" + raw_code
+        
+        with open('custom_logic.py', 'w') as f:
+            f.write(file_content)
+            
+        return jsonify({'status': 'success', 'message': 'Logic updated!'})
+
+    except Exception as e:
+        logger.error(f"Failed to update code: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 
 if __name__ == '__main__':
     try:
@@ -341,4 +325,3 @@ if __name__ == '__main__':
     except Exception as e:
         logger.error(f"Failed to start server: {str(e)}")
         raise
-
