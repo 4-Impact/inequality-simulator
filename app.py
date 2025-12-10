@@ -277,22 +277,20 @@ def blockly_files(filename):
     """Serve static files for Blockly"""
     return send_from_directory('blockly', filename)
 
-# --- ADD THIS NEW ROUTE ---
 @app.route('/api/reset_code', methods=['POST'])
 def reset_code():
-    """Resets custom_logic.py to default state (disabling it)"""
+    """Resets user_logic.py to default state (disabling it)"""
     try:
         default_content = "HAS_CUSTOM_LOGIC = False\n\ndef step(self):\n    pass\n"
-        with open('custom_logic.py', 'w') as f:
+        with open('user_logic.py', 'w') as f:  # CORRECTED: Writes to user_logic.py
             f.write(default_content)
         return jsonify({'status': 'success', 'message': 'Logic reset to default.'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# --- MODIFY THE EXISTING UPDATE ROUTE ---
 @app.route('/api/update_code', methods=['POST'])
 def update_code():
-    """Receives Python code from Blockly and overwrites custom_logic.py"""
+    """Receives Python code from Blockly and overwrites user_logic.py"""
     try:
         data = request.get_json()
         raw_code = data.get('code')
@@ -300,7 +298,7 @@ def update_code():
         # Inject the Active Flag = True
         file_content = "HAS_CUSTOM_LOGIC = True\n\nfrom policyblocks import *\nfrom utilities import *\n\n" + raw_code
         
-        with open('custom_logic.py', 'w') as f:
+        with open('user_logic.py', 'w') as f: # CORRECTED: Writes to user_logic.py
             f.write(file_content)
             
         return jsonify({'status': 'success', 'message': 'Logic updated!'})
@@ -316,7 +314,6 @@ if __name__ == '__main__':
         current_model = WealthModel()
         logger.info("Default model initialized")
         
-        # Use environment port for production, fallback to 5000 for local
         import os
         port = int(os.environ.get('PORT', 5000))
         logger.info(f"Starting server on port {port}")

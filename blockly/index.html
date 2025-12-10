@@ -35,17 +35,23 @@
 </head>
 <body>
   <h1>Inequality Simulator Logic Model</h1>
-  <div class="info">This visual representation maps directly to the logic in <code>model.py</code> and <code>agent.py</code>.</div>
+  <div class="info">This visual representation maps directly to the logic in <code>agent.py</code>. Modify the agent's behavior below.</div>
+  
+  <div style="background: #34495e; padding: 10px; display: flex; align-items: center; gap: 10px;">
+    <button onclick="generateAndSave()" style="padding: 10px 20px; background: #27ae60; color: white; border: none; cursor: pointer; font-weight: bold; border-radius: 4px;">
+        Update Simulation Logic
+    </button>
+    
+    <button onclick="resetLogic()" style="padding: 10px 20px; background: #e67e22; color: white; border: none; cursor: pointer; font-weight: bold; border-radius: 4px;">
+        Reset to Default
+    </button>
+    
+    <span id="saveStatus" style="color: #bdc3c7; font-size: 0.9em;"></span>
+</div>
+
   <div id="blocklyDiv"></div>
 
   <xml xmlns="https://developers.google.com/blockly/xml" id="toolbox" style="display: none">
-    <category name="Model Logic" colour="230">
-      <block type="model_step_def"></block>
-      <block type="calc_metrics"></block>
-      <block type="calc_survival"></block>
-      <block type="agent_loop"></block>
-      <block type="collect_data"></block>
-    </category>
     <category name="Agent Logic" colour="120">
       <block type="agent_step_def"></block>
       <block type="update_history"></block>
@@ -56,12 +62,9 @@
       <block type="execute_fascism"></block>
       <block type="execute_capitalism"></block>
       <block type="execute_communism"></block>
-      <block type="execute_patron"></block>
-      <block type="calc_startup_capital"></block>
     </category>
     <category name="Control" colour="210">
       <block type="check_policy"></block>
-      <block type="policy_config_check"></block>
       <block type="check_elite"></block>
     </category>
   </xml>
@@ -82,116 +85,130 @@
       theme: Blockly.Themes.Dark
     });
 
-    <div style="background: #34495e; padding: 10px; display: flex; align-items: center; gap: 10px;">
-        <button onclick="generateAndSave()" style="padding: 10px 20px; background: #27ae60; color: white; border: none; cursor: pointer; font-weight: bold; border-radius: 4px;">
-            Update Simulation Logic
-        </button>
-        
-        <button onclick="resetLogic()" style="padding: 10px 20px; background: #e67e22; color: white; border: none; cursor: pointer; font-weight: bold; border-radius: 4px;">
-            Reset to Default
-        </button>
-        
-        <span id="saveStatus" style="color: #bdc3c7; font-size: 0.9em;"></span>
-    </div>
-
-    // XML representing the current Python code logic
     var startXml = `
     <xml xmlns="https://developers.google.com/blockly/xml">
-      <block type="model_step_def" x="50" y="50">
+      <block type="agent_step_def" x="50" y="50">
         <statement name="STEPS">
-          <block type="calc_metrics">
+            <block type="update_history">
             <next>
-              <block type="calc_survival">
-                <next>
-                  <block type="policy_config_check">
-                    <field name="OPTION">capitalism</field>
-                    <statement name="DO">
-                      <block type="calc_startup_capital"></block>
-                    </statement>
-                    <next>
-                      <block type="policy_config_check">
-                        <field name="OPTION">patron</field>
-                        <statement name="DO">
-                          <block type="execute_patron"></block>
-                        </statement>
-                        <next>
-                          <block type="agent_loop">
-                            <next>
-                              <block type="collect_data"></block>
-                            </next>
-                          </block>
-                        </next>
-                      </block>
-                    </next>
-                  </block>
-                </next>
-              </block>
-            </next>
-          </block>
-        </statement>
-      </block>
-
-      <block type="agent_step_def" x="600" y="50">
-        <statement name="STEPS">
-          <block type="update_history">
-            <next>
-              <block type="check_policy">
+                <block type="check_policy">
                 <field name="OPTION">fascism</field>
                 <statement name="DO">
-                  <block type="execute_fascism">
+                    <block type="execute_fascism">
                     <next>
-                      <block type="check_elite">
+                        <block type="check_elite">
                         <statement name="DO">
-                          <block type="execute_wealth_exchange"></block>
+                            <block type="execute_wealth_exchange"></block>
                         </statement>
-                      </block>
+                        </block>
                     </next>
-                  </block>
+                    </block>
                 </statement>
                 <next>
-                  <block type="check_policy">
+                    <block type="check_policy">
                     <field name="OPTION">capitalism</field>
                     <statement name="DO">
-                      <block type="execute_capitalism">
+                        <block type="execute_capitalism">
                         <next>
-                          <block type="execute_wealth_exchange"></block>
+                            <block type="execute_wealth_exchange"></block>
                         </next>
-                      </block>
+                        </block>
                     </statement>
                     <next>
-                      <block type="check_policy">
+                        <block type="check_policy">
                         <field name="OPTION">communism</field>
                         <statement name="DO">
-                          <block type="execute_communism">
+                            <block type="execute_communism">
                             <next>
-                              <block type="execute_wealth_exchange"></block>
+                                <block type="execute_wealth_exchange"></block>
                             </next>
-                          </block>
+                            </block>
                         </statement>
                         <next>
-                          <block type="check_policy">
+                            <block type="check_policy">
                             <field name="OPTION">econophysics</field>
                             <statement name="DO">
-                              <block type="execute_wealth_exchange"></block>
+                                <block type="execute_wealth_exchange"></block>
                             </statement>
                             <next>
-                              <block type="calc_agent_metrics"></block>
+                                <block type="calc_agent_metrics"></block>
                             </next>
-                          </block>
+                            </block>
                         </next>
-                      </block>
+                        </block>
                     </next>
-                  </block>
+                    </block>
                 </next>
-              </block>
+                </block>
             </next>
-          </block>
+            </block>
         </statement>
       </block>
     </xml>
     `;
 
     Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(startXml), workspace);
+  </script>
+
+  <script src="https://unpkg.com/blockly/python_compressed.js"></script>
+  <script src="python_generator.js"></script>
+
+  <script>
+    function generateAndSave() {
+        // 1. Generate Python Code from Blocks
+        var code = Blockly.Python.workspaceToCode(workspace);
+        
+        document.getElementById('saveStatus').innerText = "Sending...";
+
+        // 2. Send to Backend
+        fetch('/api/update_code', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                code: code
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if(data.status === 'success') {
+                document.getElementById('saveStatus').innerText = "Saved! Logic updated.";
+                document.getElementById('saveStatus').style.color = "#2ecc71";
+            } else {
+                document.getElementById('saveStatus').innerText = "Error saving.";
+                document.getElementById('saveStatus').style.color = "#e74c3c";
+            }
+            setTimeout(() => { document.getElementById('saveStatus').innerText = ""; }, 3000);
+        })
+        .catch(err => {
+            console.error(err);
+            document.getElementById('saveStatus').innerText = "Connection Error";
+        });
+    }
+
+    function resetLogic() {
+        if(!confirm("Are you sure you want to revert to the original simulation code?")) return;
+
+        document.getElementById('saveStatus').innerText = "Resetting...";
+
+        fetch('/api/reset_code', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        })
+        .then(response => response.json())
+        .then(data => {
+            if(data.status === 'success') {
+                document.getElementById('saveStatus').innerText = "Reset Successful. Using default logic.";
+                document.getElementById('saveStatus').style.color = "#e67e22";
+            } else {
+                document.getElementById('saveStatus').innerText = "Error resetting.";
+            }
+            setTimeout(() => { document.getElementById('saveStatus').innerText = ""; }, 3000);
+        })
+        .catch(err => {
+            console.error(err);
+            document.getElementById('saveStatus').innerText = "Connection Error";
+        });
+    }
   </script>
 </body>
 </html>
