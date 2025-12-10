@@ -196,8 +196,8 @@ class WealthModel(mesa.Model):
             self.step_comparison_models()
             return
 
-model = WealthModel(policy="comparison", start_up_required=2)
-for _ in range(50): 
-    model.step()
-print(model.datacollector.get_model_vars_dataframe())
+# model = WealthModel(policy="comparison", start_up_required=2)
+# for _ in range(50): 
+#     model.step()
+# print(model.datacollector.get_model_vars_dataframe())
 
