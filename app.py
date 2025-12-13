@@ -277,12 +277,13 @@ def blockly_files(filename):
     """Serve static files for Blockly"""
     return send_from_directory('blockly', filename)
 
+# --- CORRECTED: Use user_logic.py ---
 @app.route('/api/reset_code', methods=['POST'])
 def reset_code():
     """Resets user_logic.py to default state (disabling it)"""
     try:
         default_content = "HAS_CUSTOM_LOGIC = False\n\ndef step(self):\n    pass\n"
-        with open('user_logic.py', 'w') as f:  # CORRECTED: Writes to user_logic.py
+        with open('user_logic.py', 'w') as f:
             f.write(default_content)
         return jsonify({'status': 'success', 'message': 'Logic reset to default.'})
     except Exception as e:
@@ -298,7 +299,7 @@ def update_code():
         # Inject the Active Flag = True
         file_content = "HAS_CUSTOM_LOGIC = True\n\nfrom policyblocks import *\nfrom utilities import *\n\n" + raw_code
         
-        with open('user_logic.py', 'w') as f: # CORRECTED: Writes to user_logic.py
+        with open('user_logic.py', 'w') as f:
             f.write(file_content)
             
         return jsonify({'status': 'success', 'message': 'Logic updated!'})
