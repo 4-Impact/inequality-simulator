@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Econophysics Interaction Animation</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #1a1a1a; font-family: 'Arial', sans-serif; }
+        #info {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            text-align: center;
+            color: #ffffff;
+            font-size: 18px;
+            pointer-events: none;
+            text-shadow: 1px 1px 2px black;
+        }
+        #step-info {
+            position: absolute;
+            bottom: 30px;
+            width: 100%;
+            text-align: center;
+            color: #4caf50;
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px black;
+        }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="info">Econophysics Wealth Exchange<br>5 Agents | Starting Wealth: 10.00</div>
+    <div id="step-info">Initializing...</div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- Configuration ---
+        const AGENT_COUNT = 5;
+        const STARTING_WEALTH = 10.00;
+        const ANIMATION_SPEED_MS = 2000; // Duration of one exchange
+        
+        // Econophysics Parameters (derived from provided python files)
+        // mean=0.2, sigma=0.05 for Payday/Proportion (W)
+        const MEAN_W = 0.2;
+        const SIGMA_W = 0.05;
+
+        // --- Scene Setup ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x222222);
+        // Add some fog for depth
+        scene.fog = new THREE.Fog(0x222222, 10, 50);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 5, 14);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.target.set(0, 1, 0);
+
+        // --- Lighting ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+        dirLight.position.set(5, 10, 7);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        // --- Floor ---
+        const floorGeo = new THREE.PlaneGeometry(20, 20);
+        const floorMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.8 });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        // --- Helper: Gaussian Random ---
+        function randomGaussian(mean, stdev) {
+            const u = 1 - Math.random(); 
+            const v = Math.random();
+            const z = Math.sqrt( -2.0 * Math.log( u ) ) * Math.cos( 2.0 * Math.PI * v );
+            return z * stdev + mean;
+        }
+
+        // --- Helper: Create Text Sprite for Numbers ---
+        function createTextSprite(message, color = 'white', fontSize = 60) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 256;
+            canvas.height = 128;
+            
+            ctx.font = `Bold ${fontSize}px Arial`;
+            ctx.fillStyle = color;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 4;
+            
+            ctx.strokeText(message, 128, 64);
+            ctx.fillText(message, 128, 64);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const material = new THREE.SpriteMaterial({ map: texture });
+            const sprite = new THREE.Sprite(material);
+            sprite.scale.set(2, 1, 1);
+            return sprite;
+        }
+
+        // --- Helper: Create Humanoid Mesh ---
+        function createHuman(color) {
+            const group = new THREE.Group();
+
+            // Materials
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0xffccaa });
+            const shirtMat = new THREE.MeshStandardMaterial({ color: color });
+            const pantsMat = new THREE.MeshStandardMaterial({ color: 0x334455 });
+
+            // Head
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.25, 32, 32), skinMat);
+            head.position.y = 1.75;
+            head.castShadow = true;
+            group.add(head);
+
+            // Body
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.2, 0.7, 32), shirtMat);
+            body.position.y = 1.15;
+            body.castShadow = true;
+            group.add(body);
+
+            // Legs
+            const legGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.75, 16);
+            const legL = new THREE.Mesh(legGeo, pantsMat);
+            legL.position.set(-0.12, 0.375, 0);
+            legL.castShadow = true;
+            group.add(legL);
+
+            const legR = new THREE.Mesh(legGeo, pantsMat);
+            legR.position.set(0.12, 0.375, 0);
+            legR.castShadow = true;
+            group.add(legR);
+
+            // Arms
+            const armGeo = new THREE.CylinderGeometry(0.07, 0.07, 0.6, 16);
+            const armL = new THREE.Mesh(armGeo, shirtMat);
+            armL.position.set(-0.32, 1.2, 0);
+            armL.rotation.z = Math.PI / 8;
+            armL.castShadow = true;
+            group.add(armL);
+
+            const armR = new THREE.Mesh(armGeo, shirtMat);
+            armR.position.set(0.32, 1.2, 0);
+            armR.rotation.z = -Math.PI / 8;
+            armR.castShadow = true;
+            group.add(armR);
+
+            return group;
+        }
+
+        // --- Agent Class ---
+        class Agent {
+            constructor(id, x, z, color) {
+                this.id = id;
+                this.wealth = STARTING_WEALTH;
+                // Payday proportion (W) from normal distribution
+                this.W = randomGaussian(MEAN_W, SIGMA_W);
+                
+                // Visuals
+                this.mesh = createHuman(color);
+                this.mesh.position.set(x, 0, z);
+                // Make them look at center
+                this.mesh.lookAt(0, 0, 0);
+                scene.add(this.mesh);
+
+                // Wealth Label
+                this.labelSprite = createTextSprite(this.wealth.toFixed(2));
+                this.labelSprite.position.set(0, 2.3, 0);
+                this.mesh.add(this.labelSprite);
+            }
+
+            updateLabel() {
+                // Remove old sprite and add new one to refresh texture
+                this.mesh.remove(this.labelSprite);
+                // Color code: Green if > 10, Red if < 10
+                const color = this.wealth >= 10 ? '#4caf50' : '#ff5252';
+                this.labelSprite = createTextSprite(this.wealth.toFixed(2), color);
+                this.labelSprite.position.set(0, 2.3, 0);
+                this.mesh.add(this.labelSprite);
+            }
+        }
+
+        // --- Initialization ---
+        const agents = [];
+        const colors = [0xe74c3c, 0x3498db, 0xf1c40f, 0x9b59b6, 0x2ecc71]; // Distinct shirt colors
+        
+        // Arrange in a semi-circle
+        const radius = 4;
+        for (let i = 0; i < AGENT_COUNT; i++) {
+            const angle = (i / (AGENT_COUNT - 1)) * Math.PI - Math.PI / 2; // Arc
+            const x = Math.sin(angle) * radius * 1.5; // Spread out a bit
+            const z = Math.cos(angle) * radius * 0.5; // Slight curve depth
+            agents.push(new Agent(i, x, z - 2, colors[i]));
+        }
+
+        // --- Animation Logic ---
+        
+        // Helper to animate a projectile (coin/orb) moving from A to B
+        function animateTransfer(fromAgent, toAgent, amount, color, duration = 1000) {
+            return new Promise(resolve => {
+                // Create Orb
+                const geo = new THREE.SphereGeometry(0.15, 16, 16);
+                const mat = new THREE.MeshBasicMaterial({ color: color });
+                const orb = new THREE.Mesh(geo, mat);
+                
+                // Start position (above head)
+                const startPos = fromAgent.mesh.position.clone().add(new THREE.Vector3(0, 2, 0));
+                const endPos = toAgent.mesh.position.clone().add(new THREE.Vector3(0, 2, 0));
+                
+                orb.position.copy(startPos);
+                scene.add(orb);
+
+                // Create Floating Text for Amount
+                const textSprite = createTextSprite(amount.toFixed(2), color, 40);
+                textSprite.scale.set(1, 0.5, 1);
+                orb.add(textSprite);
+
+                let startTime = null;
+
+                function loop(time) {
+                    if (!startTime) startTime = time;
+                    const progress = (time - startTime) / duration;
+
+                    if (progress < 1) {
+                        // Parabolic arc
+                        const currentPos = new THREE.Vector3().lerpVectors(startPos, endPos, progress);
+                        currentPos.y += Math.sin(progress * Math.PI) * 1.5; // Arc height
+                        orb.position.copy(currentPos);
+                        requestAnimationFrame(loop);
+                    } else {
+                        scene.remove(orb);
+                        resolve();
+                    }
+                }
+                requestAnimationFrame(loop);
+            });
+        }
+
+        // Helper to animate floating text (e.g. Payday)
+        function animateFloatingText(agent, text, color, duration = 1000) {
+            return new Promise(resolve => {
+                const sprite = createTextSprite(text, color, 40);
+                sprite.position.copy(agent.mesh.position).add(new THREE.Vector3(0, 2.5, 0));
+                scene.add(sprite);
+
+                let startTime = null;
+                function loop(time) {
+                    if (!startTime) startTime = time;
+                    const progress = (time - startTime) / duration;
+
+                    if (progress < 1) {
+                        sprite.position.y += 0.02; // Float up
+                        sprite.material.opacity = 1 - progress; // Fade out
+                        requestAnimationFrame(loop);
+                    } else {
+                        scene.remove(sprite);
+                        resolve();
+                    }
+                }
+                requestAnimationFrame(loop);
+            });
+        }
+
+        // --- The Econophysics Simulation Sequence ---
+        async function runSimulation() {
+            const stepInfo = document.getElementById('step-info');
+
+            for (let i = 0; i < agents.length; i++) {
+                const agent = agents[i];
+                stepInfo.innerHTML = `Turn: Agent ${i + 1}`;
+                
+                // Highlight active agent
+                const originalScale = agent.mesh.scale.clone();
+                agent.mesh.scale.multiplyScalar(1.2);
+
+                // --- 1. PAYDAY ---
+                // "Agent adds agent proportion of wealth per their attribute"
+                // agent.wealth += (agent.W * agent.wealth)
+                const income = agent.wealth * agent.W;
+                agent.wealth += income;
+                agent.updateLabel();
+                await animateFloatingText(agent, `+${income.toFixed(2)}`, '#4caf50', 1000);
+
+                // --- 2. SURVIVAL COST ---
+                // "exp_scale = np.mean([agent.wealth...])"
+                const allWealths = agents.map(a => a.wealth);
+                const expScale = allWealths.reduce((a, b) => a + b, 0) / allWealths.length;
+                
+                let survivalCost = 0;
+                if (expScale > 1) {
+                    // scipy.stats.expon.ppf(0.1, scale=expScale)
+                    // Formula: -scale * ln(1 - q)
+                    // For q=0.1: -scale * ln(0.9) approx scale * 0.105
+                    survivalCost = -expScale * Math.log(1 - 0.1);
+                }
+
+                stepInfo.innerHTML = `Agent ${i+1}: Paying Survival Cost (${survivalCost.toFixed(2)})`;
+
+                // Pick random other agent
+                let survivalTargetIdx;
+                do {
+                    survivalTargetIdx = Math.floor(Math.random() * AGENT_COUNT);
+                } while (survivalTargetIdx === i);
+                const survivalTarget = agents[survivalTargetIdx];
+
+                // Transaction Logic
+                let actualPay = 0;
+                if (agent.wealth > survivalCost) {
+                    agent.wealth -= survivalCost;
+                    survivalTarget.wealth += survivalCost;
+                    actualPay = survivalCost;
+                } else {
+                    // Bankruptcy logic from policyblocks.py
+                    actualPay = agent.wealth;
+                    survivalTarget.wealth += actualPay;
+                    agent.wealth = 1; // Reset wealth
+                }
+
+                // Animate Transfer (Red orb for cost)
+                await animateTransfer(agent, survivalTarget, actualPay, '#ff5252', 1500);
+                agent.updateLabel();
+                survivalTarget.updateLabel();
+
+                // --- 3. THRIVE COST ---
+                // "Pays other agent based on their wealth proportion for some good or service"
+                stepInfo.innerHTML = `Agent ${i+1}: Checking Thrive Exchange...`;
+                
+                let thriveTargetIdx;
+                do {
+                    thriveTargetIdx = Math.floor(Math.random() * AGENT_COUNT);
+                } while (thriveTargetIdx === i);
+                const thriveTarget = agents[thriveTargetIdx];
+
+                const thriveCost = thriveTarget.W * agent.wealth;
+
+                if (agent.wealth > thriveCost) {
+                    stepInfo.innerHTML = `Agent ${i+1}: Paying Thrive Cost (${thriveCost.toFixed(2)})`;
+                    
+                    // Transaction
+                    thriveTarget.wealth += thriveCost;
+                    agent.wealth -= thriveCost;
+
+                    // Animate Transfer (Blue orb for commerce/thrive)
+                    await animateTransfer(agent, thriveTarget, thriveCost, '#3498db', 1500);
+                    agent.updateLabel();
+                    thriveTarget.updateLabel();
+                } else {
+                    stepInfo.innerHTML = `Agent ${i+1}: Cannot afford Thrive Cost`;
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+
+                // Reset scale
+                agent.mesh.scale.copy(originalScale);
+                await new Promise(r => setTimeout(r, 500)); // Pause before next agent
+            }
+
+            stepInfo.innerHTML = "Round Complete";
+            stepInfo.style.color = "white";
+        }
+
+        // Start animation after slight delay
+        setTimeout(runSimulation, 1000);
+
+        // --- Render Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Handle Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>

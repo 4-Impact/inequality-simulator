@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Inequality Simulator - Logic Visualization</title>
+  
+  <script src="https://unpkg.com/blockly/blockly.min.js"></script>
+  <script src="https://unpkg.com/blockly/python_compressed.js"></script>
+
+  <style>
+    body {
+      background-color: #1a1a1a;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    h1 {
+      padding: 10px 20px;
+      margin: 0;
+      background-color: #2c3e50;
+      font-size: 1.2rem;
+    }
+    #blocklyDiv {
+      flex-grow: 1;
+      width: 100%;
+    }
+    .info {
+        padding: 10px 20px;
+        font-size: 0.9rem;
+        color: #bdc3c7;
+        background-color: #34495e;
+    }
+  </style>
+</head>
+<body>
+  <h1>Explore the Policies </h1>
+  <div class="info">You can manipulate the blocks to change the simulation.</div>
+  
+  <div style="background: #34495e; padding: 10px; display: flex; align-items: center; gap: 10px;">
+    <button onclick="generateAndSave()" style="padding: 10px 20px; background: #27ae60; color: white; border: none; cursor: pointer; font-weight: bold; border-radius: 4px;">
+        Update Simulation Logic
+    </button>
+    
+    <button onclick="resetLogic()" style="padding: 10px 20px; background: #e67e22; color: white; border: none; cursor: pointer; font-weight: bold; border-radius: 4px;">
+        Reset to Default
+    </button>
+    
+    <span id="saveStatus" style="color: #bdc3c7; font-size: 0.9em;"></span>
+</div>
+
+  <div id="blocklyDiv"></div>
+
+  <xml xmlns="https://developers.google.com/blockly/xml" id="toolbox" style="display: none">
+    <category name="Agent Logic" colour="120">
+      <block type="agent_step_def"></block>
+      <block type="update_history"></block>
+      <block type="calc_agent_metrics"></block>
+    </category>
+    <category name="Policies" colour="0">
+      <block type="execute_wealth_exchange"></block>
+      <block type="execute_fascism"></block>
+      <block type="execute_capitalism"></block>
+      <block type="execute_communism"></block>
+    </category>
+    <category name="Control" colour="210">
+      <block type="check_policy"></block>
+      <block type="check_elite"></block>
+    </category>
+  </xml>
+
+  <script>
+    // --- 1. BLOCK DEFINITIONS (Formerly custom_blocks.js) ---
+    const BLOCK_COLOR_AGENT = 120;
+    const BLOCK_COLOR_POLICY = 0;
+    const BLOCK_COLOR_LOGIC = 210;
+
+    Blockly.defineBlocksWithJsonArray([
+      {
+        "type": "agent_step_def",
+        "message0": "Agent Action %1 %2",
+        "args0": [
+          { "type": "input_dummy" },
+          { "type": "input_statement", "name": "STEPS" }
+        ],
+        "colour": BLOCK_COLOR_AGENT,
+        "tooltip": "The logic running inside every agent per turn"
+      },
+      {
+        "type": "update_history",
+        "message0": "Update Bracket History",
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": BLOCK_COLOR_AGENT
+      },
+      {
+        "type": "check_policy",
+        "message0": "If Policy is %1",
+        "args0": [
+          {
+            "type": "field_dropdown",
+            "name": "OPTION",
+            "options": [
+              ["Fascism", "fascism"],
+              ["Capitalism", "capitalism"],
+              ["Communism", "communism"],
+              ["Econophysics", "econophysics"]
+            ]
+          }
+        ],
+        "message1": "Then %1",
+        "args1": [{ "type": "input_statement", "name": "DO" }],
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": BLOCK_COLOR_LOGIC
+      },
+      {
+        "type": "execute_fascism",
+        "message0": "Execute Fascism (Pay Tax)",
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": BLOCK_COLOR_POLICY
+      },
+      {
+        "type": "check_elite",
+        "message0": "If Not Party Elite %1",
+        "args0": [{ "type": "input_statement", "name": "DO" }],
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": BLOCK_COLOR_LOGIC
+      },
+      {
+        "type": "execute_wealth_exchange",
+        "message0": "Execute Wealth Exchange (Survival/Thrive)",
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": BLOCK_COLOR_POLICY
+      },
+      {
+        "type": "execute_capitalism",
+        "message0": "Execute Capitalism (Innovate)",
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": BLOCK_COLOR_POLICY
+      },
+      {
+        "type": "execute_communism",
+        "message0": "Execute Communism (Redistribute)",
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": BLOCK_COLOR_POLICY
+      },
+      {
+        "type": "calc_agent_metrics",
+        "message0": "Calculate Bracket & Mobility",
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": BLOCK_COLOR_AGENT
+      }
+    ]);
+   
+    // FIX: Force 4-space indentation for Python
+    Blockly.Python.INDENT = '    ';
+
+    // UPDATED: Use .forBlock[...] for latest Blockly versions
+    Blockly.Python.forBlock['agent_step_def'] = function(block) {
+      var statements_steps = Blockly.Python.statementToCode(block, 'STEPS');
+      var code = 'def step(self):\n' + 
+                 '    # Update bracket\n' + 
+                 '    self.previous = self.bracket\n\n' + 
+                 statements_steps;
+      return code;
+    };
+
+    Blockly.Python.forBlock['check_policy'] = function(block) {
+      var dropdown_option = block.getFieldValue('OPTION');
+      var statements_do = Blockly.Python.statementToCode(block, 'DO');
+      return 'if self.model.policy == "' + dropdown_option + '":\n' + statements_do;
+    };
+
+    Blockly.Python.forBlock['execute_fascism'] = function(block) {
+      return 'Fascism().execute(self)\n';
+    };
+
+    Blockly.Python.forBlock['execute_capitalism'] = function(block) {
+      return 'Capitalism().execute(self)\n';
+    };
+
+    Blockly.Python.forBlock['execute_communism'] = function(block) {
+      return 'Communism().execute(self.model)\n'; 
+    };
+
+    Blockly.Python.forBlock['execute_wealth_exchange'] = function(block) {
+      return 'WealthExchange().execute(self)\n';
+    };
+
+    Blockly.Python.forBlock['check_elite'] = function(block) {
+      var statements_do = Blockly.Python.statementToCode(block, 'DO');
+      return 'if self.party_elite == False:\n' + statements_do;
+    };
+
+    Blockly.Python.forBlock['update_history'] = function(block) {
+      return '# Update bracket history\n' +
+             'self.bracket_history.append(self.bracket)\n' +
+             'if len(self.bracket_history) > 20:\n' +
+             '    self.bracket_history = self.bracket_history[-20:]\n';
+    };
+
+    Blockly.Python.forBlock['calc_agent_metrics'] = function(block) {
+      return '# Calculate bracket\n' +
+             'if self.wealth < self.model.brackets[0]:\n' +
+             '    self.bracket = "Lower"\n' +
+             'elif self.wealth >= self.model.brackets[1]:\n' +
+             '    self.bracket = "Upper"\n' +
+             'else:\n' +
+             '    self.bracket = "Middle"\n' +
+             'self.mobility = calculate_bartholomew_mobility(self)\n';
+    };
+
+    // --- 3. WORKSPACE INIT ---
+    var workspace = Blockly.inject('blocklyDiv', {
+      media: 'https://unpkg.com/blockly/media/',
+      toolbox: document.getElementById('toolbox'),
+      scrollbars: true,
+      zoom: { controls: true, wheel: true, startScale: 0.8, maxScale: 3, minScale: 0.3, scaleSpeed: 1.2 },
+      theme: Blockly.Themes.Dark
+    });
+
+    var startXml = `
+    <xml xmlns="https://developers.google.com/blockly/xml">
+      <block type="agent_step_def" x="50" y="50">
+        <statement name="STEPS">
+            <block type="update_history">
+            <next>
+                <block type="check_policy">
+                <field name="OPTION">fascism</field>
+                <statement name="DO">
+                    <block type="execute_fascism">
+                    <next>
+                        <block type="check_elite">
+                        <statement name="DO">
+                            <block type="execute_wealth_exchange"></block>
+                        </statement>
+                        </block>
+                    </next>
+                    </block>
+                </statement>
+                <next>
+                    <block type="check_policy">
+                    <field name="OPTION">capitalism</field>
+                    <statement name="DO">
+                        <block type="execute_capitalism">
+                        <next>
+                            <block type="execute_wealth_exchange"></block>
+                        </next>
+                        </block>
+                    </statement>
+                    <next>
+                        <block type="check_policy">
+                        <field name="OPTION">communism</field>
+                        <statement name="DO">
+                            <block type="execute_communism">
+                            <next>
+                                <block type="execute_wealth_exchange"></block>
+                            </next>
+                            </block>
+                        </statement>
+                        <next>
+                            <block type="check_policy">
+                            <field name="OPTION">econophysics</field>
+                            <statement name="DO">
+                                <block type="execute_wealth_exchange"></block>
+                            </statement>
+                            <next>
+                                <block type="calc_agent_metrics"></block>
+                            </next>
+                            </block>
+                        </next>
+                        </block>
+                    </next>
+                    </block>
+                </next>
+                </block>
+            </next>
+            </block>
+        </statement>
+      </block>
+    </xml>
+    `;
+
+    Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(startXml), workspace);
+
+    // --- 4. BUTTON LOGIC ---
+    function generateAndSave() {
+        var code = Blockly.Python.workspaceToCode(workspace);
+        document.getElementById('saveStatus').innerText = "Sending...";
+
+        fetch('/api/update_code', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ code: code })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if(data.status === 'success') {
+                document.getElementById('saveStatus').innerText = "Saved! Logic updated.";
+                document.getElementById('saveStatus').style.color = "#2ecc71";
+            } else {
+                document.getElementById('saveStatus').innerText = "Error saving.";
+                document.getElementById('saveStatus').style.color = "#e74c3c";
+            }
+            setTimeout(() => { document.getElementById('saveStatus').innerText = ""; }, 3000);
+        })
+        .catch(err => {
+            console.error(err);
+            document.getElementById('saveStatus').innerText = "Connection Error";
+        });
+    }
+
+    function resetLogic() {
+        if(!confirm("Are you sure you want to revert to the original simulation code?")) return;
+        document.getElementById('saveStatus').innerText = "Resetting...";
+
+        fetch('/api/reset_code', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        })
+        .then(response => response.json())
+        .then(data => {
+            if(data.status === 'success') {
+                document.getElementById('saveStatus').innerText = "Reset Successful. Using default logic.";
+                document.getElementById('saveStatus').style.color = "#e67e22";
+            } else {
+                document.getElementById('saveStatus').innerText = "Error resetting.";
+            }
+            setTimeout(() => { document.getElementById('saveStatus').innerText = ""; }, 3000);
+        })
+        .catch(err => {
+            console.error(err);
+            document.getElementById('saveStatus').innerText = "Connection Error";
+        });
+    }
+  </script>
+</body>
+</html>
