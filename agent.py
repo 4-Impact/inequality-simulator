@@ -22,10 +22,10 @@ class WealthAgent(mesa.Agent):
 
     def step(self):
         
-        try:
-            importlib.reload(user_logic)
-        except Exception:
-            pass # Fail silently if file issues, fall back to default
+        #try:
+        importlib.reload(user_logic)
+        #except Exception:
+        #    pass # Fail silently if file issues, fall back to default
 
         # 2. Check if Custom Logic is Active
         if getattr(user_logic, 'HAS_CUSTOM_LOGIC', False):

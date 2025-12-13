@@ -277,7 +277,6 @@ def blockly_files(filename):
     """Serve static files for Blockly"""
     return send_from_directory('blockly', filename)
 
-# --- CORRECTED: Use user_logic.py ---
 @app.route('/api/reset_code', methods=['POST'])
 def reset_code():
     """Resets user_logic.py to default state (disabling it)"""

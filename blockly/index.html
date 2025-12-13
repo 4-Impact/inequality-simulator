@@ -3,8 +3,10 @@
 <head>
   <meta charset="utf-8">
   <title>Inequality Simulator - Logic Visualization</title>
+  
   <script src="https://unpkg.com/blockly/blockly.min.js"></script>
-  <script src="custom_blocks.js"></script>
+  <script src="https://unpkg.com/blockly/python_compressed.js"></script>
+
   <style>
     body {
       background-color: #1a1a1a;
@@ -70,18 +72,160 @@
   </xml>
 
   <script>
+    // --- 1. BLOCK DEFINITIONS (Formerly custom_blocks.js) ---
+    const BLOCK_COLOR_AGENT = 120;
+    const BLOCK_COLOR_POLICY = 0;
+    const BLOCK_COLOR_LOGIC = 210;
+
+    Blockly.defineBlocksWithJsonArray([
+      {
+        "type": "agent_step_def",
+        "message0": "Agent Step (Individual Logic) %1 %2",
+        "args0": [
+          { "type": "input_dummy" },
+          { "type": "input_statement", "name": "STEPS" }
+        ],
+        "colour": BLOCK_COLOR_AGENT,
+        "tooltip": "The logic running inside every agent per turn"
+      },
+      {
+        "type": "update_history",
+        "message0": "Update Bracket History",
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": BLOCK_COLOR_AGENT
+      },
+      {
+        "type": "check_policy",
+        "message0": "If Policy is %1",
+        "args0": [
+          {
+            "type": "field_dropdown",
+            "name": "OPTION",
+            "options": [
+              ["Fascism", "fascism"],
+              ["Capitalism", "capitalism"],
+              ["Communism", "communism"],
+              ["Econophysics", "econophysics"]
+            ]
+          }
+        ],
+        "message1": "Then %1",
+        "args1": [{ "type": "input_statement", "name": "DO" }],
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": BLOCK_COLOR_LOGIC
+      },
+      {
+        "type": "execute_fascism",
+        "message0": "Execute Fascism (Pay Tax)",
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": BLOCK_COLOR_POLICY
+      },
+      {
+        "type": "check_elite",
+        "message0": "If Not Party Elite %1",
+        "args0": [{ "type": "input_statement", "name": "DO" }],
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": BLOCK_COLOR_LOGIC
+      },
+      {
+        "type": "execute_wealth_exchange",
+        "message0": "Execute Wealth Exchange (Survival/Thrive)",
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": BLOCK_COLOR_POLICY
+      },
+      {
+        "type": "execute_capitalism",
+        "message0": "Execute Capitalism (Innovate)",
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": BLOCK_COLOR_POLICY
+      },
+      {
+        "type": "execute_communism",
+        "message0": "Execute Communism (Redistribute)",
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": BLOCK_COLOR_POLICY
+      },
+      {
+        "type": "calc_agent_metrics",
+        "message0": "Calculate Bracket & Mobility",
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": BLOCK_COLOR_AGENT
+      }
+    ]);
+
+    // --- 2. PYTHON GENERATORS (Formerly python_generator.js) ---
+    
+    // FIX: Force 4-space indentation for Python
+    Blockly.Python.INDENT = '    ';
+
+    Blockly.Python['agent_step_def'] = function(block) {
+      var statements_steps = Blockly.Python.statementToCode(block, 'STEPS');
+      var code = 'def step(self):\n' + 
+                 '    # Update bracket\n' + 
+                 '    self.previous = self.bracket\n\n' + 
+                 statements_steps;
+      return code;
+    };
+
+    Blockly.Python['check_policy'] = function(block) {
+      var dropdown_option = block.getFieldValue('OPTION');
+      var statements_do = Blockly.Python.statementToCode(block, 'DO');
+      return 'if self.model.policy == "' + dropdown_option + '":\n' + statements_do;
+    };
+
+    Blockly.Python['execute_fascism'] = function(block) {
+      return 'Fascism().execute(self)\n';
+    };
+
+    Blockly.Python['execute_capitalism'] = function(block) {
+      return 'Capitalism().execute(self)\n';
+    };
+
+    Blockly.Python['execute_communism'] = function(block) {
+      return 'Communism().execute(self.model)\n'; 
+    };
+
+    Blockly.Python['execute_wealth_exchange'] = function(block) {
+      return 'WealthExchange().execute(self)\n';
+    };
+
+    Blockly.Python['check_elite'] = function(block) {
+      var statements_do = Blockly.Python.statementToCode(block, 'DO');
+      return 'if self.party_elite == False:\n' + statements_do;
+    };
+
+    Blockly.Python['update_history'] = function(block) {
+      return '# Update bracket history\n' +
+             'self.bracket_history.append(self.bracket)\n' +
+             'if len(self.bracket_history) > 20:\n' +
+             '    self.bracket_history = self.bracket_history[-20:]\n';
+    };
+
+    Blockly.Python['calc_agent_metrics'] = function(block) {
+      return '# Calculate bracket\n' +
+             'if self.wealth < self.model.brackets[0]:\n' +
+             '    self.bracket = "Lower"\n' +
+             'elif self.wealth >= self.model.brackets[1]:\n' +
+             '    self.bracket = "Upper"\n' +
+             'else:\n' +
+             '    self.bracket = "Middle"\n' +
+             'self.mobility = calculate_bartholomew_mobility(self)\n';
+    };
+
+    // --- 3. WORKSPACE INIT ---
     var workspace = Blockly.inject('blocklyDiv', {
       media: 'https://unpkg.com/blockly/media/',
       toolbox: document.getElementById('toolbox'),
       scrollbars: true,
-      zoom: {
-        controls: true,
-        wheel: true,
-        startScale: 0.8,
-        maxScale: 3,
-        minScale: 0.3,
-        scaleSpeed: 1.2
-      },
+      zoom: { controls: true, wheel: true, startScale: 0.8, maxScale: 3, minScale: 0.3, scaleSpeed: 1.2 },
       theme: Blockly.Themes.Dark
     });
 
@@ -148,25 +292,16 @@
     `;
 
     Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(startXml), workspace);
-  </script>
 
-  <script src="https://unpkg.com/blockly/python_compressed.js"></script>
-  <script src="python_generator.js"></script>
-
-  <script>
+    // --- 4. BUTTON LOGIC ---
     function generateAndSave() {
-        // 1. Generate Python Code from Blocks
         var code = Blockly.Python.workspaceToCode(workspace);
-        
         document.getElementById('saveStatus').innerText = "Sending...";
 
-        // 2. Send to Backend
         fetch('/api/update_code', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                code: code
-            })
+            body: JSON.stringify({ code: code })
         })
         .then(response => response.json())
         .then(data => {
@@ -187,7 +322,6 @@
 
     function resetLogic() {
         if(!confirm("Are you sure you want to revert to the original simulation code?")) return;
-
         document.getElementById('saveStatus').innerText = "Resetting...";
 
         fetch('/api/reset_code', {
