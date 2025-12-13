@@ -113,6 +113,7 @@ def system_reset():
     return jsonify({'status': 'success', 'message': 'System reset complete'})
 
 
+# ...existing code...
 @app.route('/api/initialize', methods=['POST'])
 def initialize_model():
     """Initialize a new model with given parameters"""
