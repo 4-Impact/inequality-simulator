@@ -19,7 +19,7 @@ ui-tests/playwright-report/
 # Edit at https://www.gitignore.io/?templates=python
 
 # animation
-*.fbx
+#*.fbx
 
 
 ### Python ###
