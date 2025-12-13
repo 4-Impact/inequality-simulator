@@ -718,7 +718,6 @@
                 <div class="chart-title">Economic Mobility</div>
                 <button class="info-button" onclick="showInfoModal('mobility')">?</button>
             </div>
-            <!-- Mobility metrics line (single or per-policy in comparison) -->
             <div id="mobility-metrics" class="chart-metrics"> </div>
             <canvas id="mobility-chart"></canvas>
             </div>
@@ -753,11 +752,16 @@
                 content: `<p>This is  the base model. All other policies add features to this simple exchange of wealth.</p>
                 <p>How it works for each step:</p>
                 <ul>
-                <li> You get a payday and pay a survival cost based on the amount of wealth in the population. </li>
-                <li> You exchange wealth randomly- pick another person give them one of your wealth. Sometimes people pick you and give you wealth.</li>
+                <li> Each turn you get a payday, which is a percentage of your wealth. </li>
+                <li> You pay a survival cost to another random agent (e.g., food, water, shelter etc.) </li>
+                <li> If you have money left over you are thriving and pay another random agent for luxury goods. (e.g., trips, phones, etc) </li>
                 </ul>
                 <p>Intuitively one may think that each agent will retain the same amount of wealth, but instead an unequal distribution of wealth occurs. </p>
-                <p>Take a look at the population view and see how each policy impacts total wealth and other population level metrics.</p>`
+                <p>The population generates more wealth, because as agents gain money, their payday increases since it is a percentage of their total. </p>
+                <p>Take a look at the population view and see how each policy impacts total wealth and other population level metrics.</p>
+                <br>
+                <p> Take a look at this mini-animation to see what is happening in the econophysics policy.</p>
+                <p><a href="/explain/econophysics" target="_blank" class="btn-primary" style="display:inline-block; padding:8px 16px; text-decoration:none; border-radius:4px; margin-top:10px;">View Animation</a></p>`
             },
             'fascism': {
                 title: "Fascism",
@@ -765,11 +769,16 @@
                     This can be thought of as a fascist system, where those in power stay in power.</p>
                 <p>How it works for each step:</p>
                 <ul>
-                <li> You get a payday and pay a survival cost based on the amount of wealth in the population. </li>
-                <li> Pay a tax to a randomly selected "elite" agent. </li>
-                <li> You exchange wealth randomly - pick a non-elite agent give them one of your wealth. Sometimes people pick you and give you wealth.</li>
+                <li> Each turn you get a payday, which is a percentage of your wealth. </li>
+                <li> You pay a tax to an agent, identified as an elite </li>
+                <li> You pay a survival cost to another random agent (e.g., food, water, shelter etc.) </li>
+                <li> If you have money left over you are thriving and pay another random agent for luxury goods. (e.g., trips, phones, etc) </li>
                 </ul>
-                <p> Notice at the population level, this inhibits total wealth growth.</p>`
+                <p> Notice at the population level, this inhibits total wealth growth. More agents have less money, so their payday is smaller and 
+                    overall the total wealth of the population is less.</p> 
+                <br>
+                <p> Take a look at this mini-animation to see what is happening in the fascism policy.</p>
+                <p><a href="/explain/fascism" target="_blank" class="btn-primary" style="display:inline-block; padding:8px 16px; text-decoration:none; border-radius:4px; margin-top:10px;">View Animation</a></p>`
             },
             'communism': {
                 title: "Communism",
@@ -778,26 +787,30 @@
                     where wealth can be perfectly distributed. (or can it?)</p>
                 <p>How it works for each step:</p>
                 <ul>
-                <li> You get a payday and pay a survival cost based on the amount of wealth in the population. </li>
-                <li> You exchange wealth randomly - pick an agent give them one of your wealth. Sometimes people pick you and give you wealth.</li>
-                <li> All wealth is then redistributed equally</li>
-                </ul>
-                <p> Notice at the population level, this inhibits total wealth growth.</p>`
+                <li> Each turn you get a payday, which is a percentage of your wealth. </li>
+                <li> That wealth is then redistributed so every has an equali share. </li>
+                <li> You pay a survival cost to another random agent (e.g., food, water, shelter etc.) </li>
+                <li> If you have money left over you are thriving and pay another random agent for luxury goods. (e.g., trips, phones, etc) </li>
+                <br>
+                <p> Take a look at this mini-animation to see what is happening in the communism policy.</p>
+                <p><a href="/explain/communism" target="_blank" class="btn-primary" style="display:inline-block; padding:8px 16px; text-decoration:none; border-radius:4px; margin-top:10px;">View Animation</a></p>`
 
             },
             'capitalism': {
                 title: "Capitalism",
                 content: `<p>In the capitalism variation, each agent has an innovation attribute. If an agent has enough wealth for an initial 
                     start up (amount needed to fund a start up is based on total population wealth), then they can then invest in a "new idea" and get a pay increase.
-                    This pay increase, then degrades over time as the innovation becomes less relevant. (The innovation attribute can also
-                    decrease pay because the agent's idea did not succeed)</p>
+                    This pay increase, then degrades over time as the innovation becomes less relevant.</p>
                 <p>How it works for each step:</p>
                 <ul>
-                <li> You get a payday and pay a survival cost based on the amount of wealth in the population. </li>
-                <li> You exchange wealth randomly - pick an agent give them one of your wealth. Sometimes people pick you and give you wealth.</li>
-                <li> If you have enough wealth, you "invest" in your ideas and can get a pay increase.</li>
+                <li> Each turn you get a payday, which is a percentage of your wealth. </li>
+                <li> If you have enough money, you can innovate (get paid more for a new good or service)
+                <li> You pay a survival cost to another random agent (e.g., food, water, shelter etc.) </li>
+                <li> If you have money left over you are thriving and pay another random agent for luxury goods. (e.g., trips, phones, etc) </li>
                 </ul>
-                <p> Notice on the population level, sometimes econophysics generates more population wealth, sometimes, capitalism does.</p>`
+                <p> Notice on the population level, capitalism generates the most total wealth because people's innovations are generating larger paydays.</p>
+                <br>
+                <p><a href="/explain/capitalism" target="_blank" class="btn-primary" style="display:inline-block; padding:8px 16px; text-decoration:none; border-radius:4px; margin-top:10px;">View Animation</a></p>`
             },
             'patron': {
                 title: "Patron Effect",
@@ -1002,11 +1015,6 @@
 
         // Kickoff once DOM is ready
         document.addEventListener('DOMContentLoaded', () => show(0));
-
-        // OPTIONAL: if you create Chart.js charts dynamically later,
-        // you can stash the chart instance on its canvas for the resize hint above:
-        //   const chart = new Chart(canvas, config);
-        //   canvas._chartInstance = chart;
     })();
     </script>
 

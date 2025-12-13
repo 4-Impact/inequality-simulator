@@ -60,6 +60,30 @@ def static_files(filename):
     """Serve static files (JS, CSS, etc.)"""
     return send_from_directory('docs', filename)
 
+# --- Explanatory Animation Routes ---
+@app.route('/explain/<name>')
+def explain_template(name):
+    """Serve the explanatory animation HTML files"""
+    # Econophysics uses index.html in the templates folder
+    if name == 'econophysics':
+        return send_from_directory('explanatory/templates', 'index.html')
+    return send_from_directory('explanatory/templates', f'{name}.html')
+
+@app.route('/css/<path:filename>')
+def explain_css(filename):
+    """Serve CSS for explanatory animations"""
+    return send_from_directory('explanatory/static/css', filename)
+
+@app.route('/js/<path:filename>')
+def explain_js(filename):
+    """Serve JS for explanatory animations"""
+    return send_from_directory('explanatory/static/js', filename)
+
+@app.route('/static/assets/<path:filename>')
+def explain_assets(filename):
+    """Serve 3D assets (FBX, etc) for explanatory animations"""
+    return send_from_directory('explanatory/static/assets', filename)
+# ------------------------------------
 
 @app.route('/api/initialize', methods=['POST'])
 def initialize_model():

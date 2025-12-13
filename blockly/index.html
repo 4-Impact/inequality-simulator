@@ -36,8 +36,8 @@
   </style>
 </head>
 <body>
-  <h1>Inequality Simulator Logic Model</h1>
-  <div class="info">This visual representation maps directly to the logic in <code>agent.py</code>. Modify the agent's behavior below.</div>
+  <h1>Explore the Policies </h1>
+  <div class="info">You can manipulate the blocks to change the simulation.</div>
   
   <div style="background: #34495e; padding: 10px; display: flex; align-items: center; gap: 10px;">
     <button onclick="generateAndSave()" style="padding: 10px 20px; background: #27ae60; color: white; border: none; cursor: pointer; font-weight: bold; border-radius: 4px;">
@@ -80,7 +80,7 @@
     Blockly.defineBlocksWithJsonArray([
       {
         "type": "agent_step_def",
-        "message0": "Agent Step (Individual Logic) %1 %2",
+        "message0": "Agent Action %1 %2",
         "args0": [
           { "type": "input_dummy" },
           { "type": "input_statement", "name": "STEPS" }
@@ -160,13 +160,12 @@
         "colour": BLOCK_COLOR_AGENT
       }
     ]);
-
-    // --- 2. PYTHON GENERATORS (Formerly python_generator.js) ---
-    
+   
     // FIX: Force 4-space indentation for Python
     Blockly.Python.INDENT = '    ';
 
-    Blockly.Python['agent_step_def'] = function(block) {
+    // UPDATED: Use .forBlock[...] for latest Blockly versions
+    Blockly.Python.forBlock['agent_step_def'] = function(block) {
       var statements_steps = Blockly.Python.statementToCode(block, 'STEPS');
       var code = 'def step(self):\n' + 
                  '    # Update bracket\n' + 
@@ -175,41 +174,41 @@
       return code;
     };
 
-    Blockly.Python['check_policy'] = function(block) {
+    Blockly.Python.forBlock['check_policy'] = function(block) {
       var dropdown_option = block.getFieldValue('OPTION');
       var statements_do = Blockly.Python.statementToCode(block, 'DO');
       return 'if self.model.policy == "' + dropdown_option + '":\n' + statements_do;
     };
 
-    Blockly.Python['execute_fascism'] = function(block) {
+    Blockly.Python.forBlock['execute_fascism'] = function(block) {
       return 'Fascism().execute(self)\n';
     };
 
-    Blockly.Python['execute_capitalism'] = function(block) {
+    Blockly.Python.forBlock['execute_capitalism'] = function(block) {
       return 'Capitalism().execute(self)\n';
     };
 
-    Blockly.Python['execute_communism'] = function(block) {
+    Blockly.Python.forBlock['execute_communism'] = function(block) {
       return 'Communism().execute(self.model)\n'; 
     };
 
-    Blockly.Python['execute_wealth_exchange'] = function(block) {
+    Blockly.Python.forBlock['execute_wealth_exchange'] = function(block) {
       return 'WealthExchange().execute(self)\n';
     };
 
-    Blockly.Python['check_elite'] = function(block) {
+    Blockly.Python.forBlock['check_elite'] = function(block) {
       var statements_do = Blockly.Python.statementToCode(block, 'DO');
       return 'if self.party_elite == False:\n' + statements_do;
     };
 
-    Blockly.Python['update_history'] = function(block) {
+    Blockly.Python.forBlock['update_history'] = function(block) {
       return '# Update bracket history\n' +
              'self.bracket_history.append(self.bracket)\n' +
              'if len(self.bracket_history) > 20:\n' +
              '    self.bracket_history = self.bracket_history[-20:]\n';
     };
 
-    Blockly.Python['calc_agent_metrics'] = function(block) {
+    Blockly.Python.forBlock['calc_agent_metrics'] = function(block) {
       return '# Calculate bracket\n' +
              'if self.wealth < self.model.brackets[0]:\n' +
              '    self.bracket = "Lower"\n' +
