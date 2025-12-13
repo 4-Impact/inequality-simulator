@@ -110,7 +110,7 @@ class InequalitySimulator {
         const showP = (i) => {
             const cards = this.personOrder.map(id=>document.getElementById(id));
             this.personIndex = (i+cards.length)%cards.length;
-            cards.forEach((el,idx)=> el && el.classList.toggle('active', idx===this.personIndex));
+            cards.forEach(el => el && el.classList.add('active'));
             updatePHUD();
         };
         if (pLeft && pRight) {

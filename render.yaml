@@ -6,4 +6,4 @@ services:
     startCommand: "gunicorn --bind 0.0.0.0:$PORT app:app"
     envVars:
       - key: PYTHON_VERSION
-        value: 3.9.16
+        value: 3.13

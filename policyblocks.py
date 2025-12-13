@@ -44,8 +44,6 @@ class WealthExchange:
             agent.wealth -= (thrive_agent.W*agent.wealth)
 
 
-
-
 # Called by Agent
 class Communism: 
     def execute(self, model): 

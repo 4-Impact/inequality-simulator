@@ -19,7 +19,8 @@ def total_wealth(model):
 
 def compute_mobility(model):
     return np.mean([agent.mobility for agent in model.agents])
- 
+       
+    
 class WealthModel(mesa.Model): 
     
     def __init__(self, policy="econophysics", population=200, start_up_required = 1, patron=False, seed=42):
@@ -199,3 +200,4 @@ class WealthModel(mesa.Model):
 # for _ in range(50): 
 #     model.step()
 # print(model.datacollector.get_model_vars_dataframe())
+
