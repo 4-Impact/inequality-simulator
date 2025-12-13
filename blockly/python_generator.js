@@ -3,7 +3,7 @@
 // 1. Logic for Agent Blocks (links to agent.py via user_logic.py)
 Blockly.Python['agent_step_def'] = function(block) {
   var statements_steps = Blockly.Python.statementToCode(block, 'STEPS');
-  // Generates the standard Mesa Agent step method signature
+  // standard Mesa Agent step method
   var code = 'def step(self):\n' + 
              '    # Update bracket\n' + 
              '    self.previous = self.bracket\n\n' + 
@@ -30,7 +30,7 @@ Blockly.Python['execute_capitalism'] = function(block) {
 };
 
 Blockly.Python['execute_communism'] = function(block) {
-  return '    Communism().execute(self.model)\n'; // Note: Communism takes 'model' args in your code
+  return '    Communism().execute(self.model)\n'; 
 };
 
 Blockly.Python['execute_wealth_exchange'] = function(block) {
