@@ -12,13 +12,20 @@ import threading
 
 def run_server():
     """Run the Flask backend server"""
-    from app import app
+    # Import the app and the reset function
+    from app import app, reset_logic_internal
+    
+    # FIX: Force a logic reset every time the server starts
+    print("Resetting simulation logic to default...")
+    reset_logic_internal()
+    
     print("Starting Inequality Simulator Backend...")
     print("Backend API will be available at: http://localhost:5000/api")
     print("Frontend will be available at: http://localhost:5000")
     print("\nPress Ctrl+C to stop the server")
     
-    app.run(debug=True, use_reloader= False, host='0.0.0.0', port=5000)
+    # Disable reloader to prevent double-execution/restarts
+    app.run(debug=True, use_reloader=False, host='0.0.0.0', port=5000)
 
 def open_browser():
     """Open browser after a short delay"""

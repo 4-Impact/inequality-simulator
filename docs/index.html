@@ -519,10 +519,22 @@
             }
         }
 
-        launchButton.addEventListener('click', (e) => {
+        // UPDATED: Trigger system reset immediately upon launching
+        launchButton.addEventListener('click', async (e) => {
             e.preventDefault();
+            
+            // 1. Show modal immediately
             populateAvatarGrid();
             avatarModal.style.display = 'block';
+
+            // 2. Trigger reset in the background
+            try {
+                console.log('Launching... triggering system reset.');
+                await fetch('/api/system_reset', { method: 'POST' });
+                console.log('System reset complete.');
+            } catch (err) {
+                console.warn('System reset failed:', err);
+            }
         });
 
         function closeAvatarModal() {

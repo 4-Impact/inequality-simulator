@@ -45,6 +45,19 @@ def json_response(data):
         mimetype='application/json'
     )
 
+# --- Helper to Reset Logic ---
+def reset_logic_internal():
+    """Internal function to reset user_logic.py to default"""
+    try:
+        default_content = "HAS_CUSTOM_LOGIC = False\n\ndef step(self):\n    pass\n"
+        with open('user_logic.py', 'w') as f:
+            f.write(default_content)
+        logger.info("user_logic.py reset to default.")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to reset user_logic.py: {e}")
+        return False
+
 @app.route('/')
 def landing():
     """Serve the landing page"""
@@ -64,7 +77,6 @@ def static_files(filename):
 @app.route('/explain/<name>')
 def explain_template(name):
     """Serve the explanatory animation HTML files"""
-    # Econophysics uses index.html in the templates folder
     if name == 'econophysics':
         return send_from_directory('explanatory/templates', 'index.html')
     return send_from_directory('explanatory/templates', f'{name}.html')
@@ -85,10 +97,30 @@ def explain_assets(filename):
     return send_from_directory('explanatory/static/assets', filename)
 # ------------------------------------
 
+
+@app.route('/api/system_reset', methods=['POST'])
+def system_reset():
+    """Resets the entire system (logic + model state)"""
+    # 1. Reset Logic File
+    reset_logic_internal()
+    
+    # 2. Clear Model State
+    global current_model
+    with model_lock:
+        current_model = None
+        
+    logger.info("System reset complete (Model cleared, Logic reset).")
+    return jsonify({'status': 'success', 'message': 'System reset complete'})
+
+
 @app.route('/api/initialize', methods=['POST'])
 def initialize_model():
     """Initialize a new model with given parameters"""
     try:
+        # Note: We removed the automatic reset here so users can restart 
+        # the simulation without losing their custom code.
+        # The reset happens on Server Start (run.py) or via Index Page (JS).
+
         global current_model
         data = request.get_json(silent=True) or {}
 
@@ -149,7 +181,6 @@ def get_wealth_distribution():
     
     with model_lock:
         if current_model.policy == "comparison" and hasattr(current_model, 'comparison_results') and current_model.comparison_results:
-            # Return comparison data
             result = {}
             policies = ["econophysics", "fascism", "communism", "capitalism"]
             for policy in policies:
@@ -157,7 +188,6 @@ def get_wealth_distribution():
                     result[policy] = current_model.comparison_results[policy]['final_wealth']
             return json_response(result)
         else:
-            # Return current model data
             wealth_vals = [agent.wealth for agent in current_model.agents]
             return json_response({'current': wealth_vals})
 
@@ -169,7 +199,6 @@ def get_mobility_data():
         return jsonify({'error': 'Model not initialized'}), 400
     
     with model_lock:
-        # For comparison mode, return data from all policy models
         if current_model.policy == "comparison" and hasattr(current_model, 'comparison_models') and current_model.comparison_models:
             comparison_data = {}
             policies = ["econophysics", "fascism", "communism", "capitalism"]
@@ -183,22 +212,19 @@ def get_mobility_data():
                             'bracket': agent.bracket,
                             'mobility': agent.mobility,
                             'wealth': agent.wealth,
-                            'policy': policy  # Add policy identifier
+                            'policy': policy
                         })
                     comparison_data[policy] = agents_data
-            
             return json_response(comparison_data)
         else:
-            # Single policy mode
             agents_data = []
             for agent in current_model.agents:
                 agents_data.append({
                     'bracket': agent.bracket,
                     'mobility': agent.mobility,
                     'wealth': agent.wealth,
-                    'policy': current_model.policy  # Add policy identifier
+                    'policy': current_model.policy
                 })
-            
             return json_response(agents_data)
 
 @app.route('/api/data/gini', methods=['GET'])
@@ -210,7 +236,6 @@ def get_gini_data():
     
     with model_lock:
         if current_model.policy == "comparison" and hasattr(current_model, 'comparison_results') and current_model.comparison_results:
-            # Return comparison data
             result = {}
             policies = ["econophysics", "fascism", "communism", "capitalism"]
             for policy in policies:
@@ -218,7 +243,6 @@ def get_gini_data():
                     result[policy] = current_model.comparison_results[policy]['gini']
             return json_response(result)
         else:
-            # Return current model data
             model_data = current_model.datacollector.get_model_vars_dataframe()
             if 'Gini' in model_data.columns:
                 gini_data = model_data['Gini'].tolist()
@@ -235,7 +259,6 @@ def get_total_wealth_data():
     
     with model_lock:
         if current_model.policy == "comparison" and hasattr(current_model, 'comparison_results') and current_model.comparison_results:
-            # Return comparison data
             result = {}
             policies = ["econophysics", "fascism", "communism", "capitalism"]
             for policy in policies:
@@ -243,7 +266,6 @@ def get_total_wealth_data():
                     result[policy] = current_model.comparison_results[policy]['total']
             return json_response(result)
         else:
-            # Return current model data
             model_data = current_model.datacollector.get_model_vars_dataframe()
             if 'Total' in model_data.columns:
                 total_data = model_data['Total'].tolist()
@@ -304,13 +326,10 @@ def blockly_files(filename):
 @app.route('/api/reset_code', methods=['POST'])
 def reset_code():
     """Resets user_logic.py to default state (disabling it)"""
-    try:
-        default_content = "HAS_CUSTOM_LOGIC = False\n\ndef step(self):\n    pass\n"
-        with open('user_logic.py', 'w') as f:
-            f.write(default_content)
+    if reset_logic_internal():
         return jsonify({'status': 'success', 'message': 'Logic reset to default.'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    else:
+        return jsonify({'error': 'Failed to reset logic'}), 500
 
 @app.route('/api/update_code', methods=['POST'])
 def update_code():
@@ -338,11 +357,14 @@ if __name__ == '__main__':
         current_model = WealthModel()
         logger.info("Default model initialized")
         
+        # Reset logic on direct app.py start as well (just in case)
+        reset_logic_internal()
+        
         import os
         port = int(os.environ.get('PORT', 5000))
         logger.info(f"Starting server on port {port}")
         
-        app.run(debug=False, host='0.0.0.0', port=port)
+        app.run(debug=False, use_reloader=False, host='0.0.0.0', port=port)
     except Exception as e:
         logger.error(f"Failed to start server: {str(e)}")
         raise
