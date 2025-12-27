@@ -67,6 +67,8 @@ class WealthModel(mesa.Model):
         innovation_array = np.where(innovation_array < 1, 
                                     innovation_array + 1, 
                                     innovation_array)
+        # How do you capture the opportunity to learn, plus the interest, 
+        # plus the opportunity to leverage knoweldge/innovation
         innovation_array = np.where(innovation_array > 3, 
                                     3,
                                     innovation_array)
