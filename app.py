@@ -73,9 +73,23 @@ def init_rag():
             "### STRICT SECURITY RULES ###\n"
             "1. GENERATE ONLY PYTHON CODE. No bash, shell, or other languages.\n"
             "2. DO NOT use these modules: os, sys, subprocess, shutil, requests, urllib, eval, exec.\n"
-            "3. Code must be a single class containing an `execute(self, agent)` method.\n\n"
-            "### OUTPUT FORMAT (JSON ONLY) ###\n"
-            "Return a raw JSON object (no markdown) with keys: 'python_code', 'block_json', 'block_generator'."
+            "3. Code must be a single class containing an `execute(self, agent)` method.\n"
+
+            "The user will ask for a policy (e.g., 'Universal Basic Income').\n"
+            "You must return the response in strict JSON format. "
+            "Do not write any conversational text before or after the JSON.\n\n"
+            
+            "### REQUIREMENTS ###\n"
+            "1. `python_code`: A Python class with an `execute(self, agent)` method.\n"
+            "2. `block_json`: A Blockly JSON definition.\n"
+            "3. `block_generator`: A JavaScript string defining the Blockly generator.\n\n"
+            
+            "### EXTREMELY IMPORTANT ###\n"
+            "Your entire output must be a single valid JSON object. "
+            "Do not wrap it in markdown blocks (like ```json). "
+            "Start your response with '{' and end with '}'."
+
+            "Let the user know the block is complete in the chat"
         )
         
         query_engine = index.as_query_engine(similarity_top_k=5, system_prompt=system_prompt)
@@ -187,26 +201,22 @@ def step_model():
         current_model.datacollector.collect(current_model)
     return jsonify({'status': 'success'})
 
-# In app.py
+#----------------------------- START  DATA COLLECTION -------------------------------------#
 
 @app.route('/api/data/wealth-distribution', methods=['GET'])
 def get_wealth_distribution():
     global current_model
-    
     if current_model is None: return jsonify({'error': 'Model not initialized'}), 400
-    
     with model_lock:
-        # Check explicitly for comparison mode first
+        # Check for Comparison Mode
         if current_model.policy == "comparison":
-            result = {}
-            policies = ["econophysics", "fascism", "communism", "capitalism"]
-            for policy in policies:
-                # Use the pre-calculated final_wealth from the results dict
-                if policy in current_model.comparison_results:
-                    result[policy] = current_model.comparison_results[policy]['final_wealth']
-            return json_response(result)
+            # Return the wealth lists from the results dictionary
+            return json_response({
+                policy: data['final_wealth'] 
+                for policy, data in current_model.comparison_results.items()
+            })
         else:
-            # Single model mode
+            # Single Model Mode
             wealth_vals = [agent.wealth for agent in current_model.agents]
             return json_response({'current': wealth_vals})
 
@@ -215,33 +225,65 @@ def get_mobility_data():
     global current_model
     if current_model is None: return jsonify({'error': 'Model not initialized'}), 400
     with model_lock:
-        agents_data = []
-        for agent in current_model.agents:
-            agents_data.append({
-                'bracket': agent.bracket,
-                'mobility': agent.mobility,
-                'wealth': agent.wealth,
-                'policy': current_model.policy
-            })
-        return json_response(agents_data)
+        if current_model.policy == "comparison":
+            # Aggregate agent data from all sub-models
+            comparison_data = {}
+            for policy, sub_model in current_model.comparison_models.items():
+                agents_data = []
+                for agent in sub_model.agents:
+                    agents_data.append({
+                        'bracket': agent.bracket,
+                        'mobility': agent.mobility,
+                        'wealth': agent.wealth,
+                        'policy': policy
+                    })
+                comparison_data[policy] = agents_data
+            return json_response(comparison_data)
+        else:
+            # Single Model Mode
+            agents_data = []
+            for agent in current_model.agents:
+                agents_data.append({
+                    'bracket': agent.bracket,
+                    'mobility': agent.mobility,
+                    'wealth': agent.wealth,
+                    'policy': current_model.policy
+                })
+            return json_response(agents_data)
 
 @app.route('/api/data/gini', methods=['GET'])
 def get_gini_data():
     global current_model
     if current_model is None: return jsonify({'error': 'Model not initialized'}), 400
     with model_lock:
-        model_data = current_model.datacollector.get_model_vars_dataframe()
-        gini_data = model_data['Gini'].tolist() if 'Gini' in model_data.columns else []
-        return json_response({'current': gini_data})
+        if current_model.policy == "comparison":
+            # Return the historical lists for each policy
+            return json_response({
+                policy: data['gini'] 
+                for policy, data in current_model.comparison_results.items()
+            })
+        else:
+            model_data = current_model.datacollector.get_model_vars_dataframe()
+            gini_data = model_data['Gini'].tolist() if 'Gini' in model_data.columns else []
+            return json_response({'current': gini_data})
 
 @app.route('/api/data/total-wealth', methods=['GET'])
 def get_total_wealth_data():
     global current_model
     if current_model is None: return jsonify({'error': 'Model not initialized'}), 400
     with model_lock:
-        model_data = current_model.datacollector.get_model_vars_dataframe()
-        total_data = model_data['Total'].tolist() if 'Total' in model_data.columns else []
-        return json_response({'current': total_data})
+        if current_model.policy == "comparison":
+            # Return the historical lists for each policy
+            return json_response({
+                policy: data['total'] 
+                for policy, data in current_model.comparison_results.items()
+            })
+        else:
+            model_data = current_model.datacollector.get_model_vars_dataframe()
+            total_data = model_data['Total'].tolist() if 'Total' in model_data.columns else []
+            return json_response({'current': total_data})
+
+#----------------------------- END DATA COLLECTION -------------------------------------#
 
 @app.route('/api/status', methods=['GET'])
 def get_status():

@@ -158,6 +158,7 @@ class WealthModel(mesa.Model):
 
         # --- SINGLE MODEL LOGIC ---
         self.brackets = calc_brackets(self)
+        self.total = total_wealth(self)
         
         # Survival Cost
         exp_scale = np.mean([agent.wealth for agent in self.agents])
