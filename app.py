@@ -181,39 +181,90 @@ def get_wealth_distribution():
     global current_model
     if current_model is None: return jsonify({'error': 'Model not initialized'}), 400
     with model_lock:
-        if current_model.policy == "comparison" and hasattr(current_model, 'comparison_results'):
+        if current_model.policy == "comparison" and hasattr(current_model, 'comparison_results') and current_model.comparison_results:
             result = {}
-            for p in ["econophysics", "fascism", "communism", "capitalism"]:
-                if p in current_model.comparison_results:
-                    result[p] = current_model.comparison_results[p]['final_wealth']
+            policies = ["econophysics", "fascism", "communism", "capitalism"]
+            for policy in policies:
+                if policy in current_model.comparison_results:
+                    result[policy] = current_model.comparison_results[policy]['final_wealth']
             return json_response(result)
-        return json_response({'current': [a.wealth for a in current_model.agents]})
+        else:
+            wealth_vals = [agent.wealth for agent in current_model.agents]
+            return json_response({'current': wealth_vals})
 
 @app.route('/api/data/mobility', methods=['GET'])
 def get_mobility_data():
     global current_model
     if current_model is None: return jsonify({'error': 'Model not initialized'}), 400
     with model_lock:
-        agents_data = []
-        for agent in current_model.agents:
-            agents_data.append({'bracket': agent.bracket, 'mobility': agent.mobility, 'wealth': agent.wealth, 'policy': current_model.policy})
-        return json_response(agents_data)
+        if current_model.policy == "comparison" and hasattr(current_model, 'comparison_models') and current_model.comparison_models:
+            comparison_data = {}
+            policies = ["econophysics", "fascism", "communism", "capitalism"]
+            
+            for policy in policies:
+                if policy in current_model.comparison_models:
+                    model = current_model.comparison_models[policy]
+                    agents_data = []
+                    for agent in model.agents:
+                        agents_data.append({
+                            'bracket': agent.bracket,
+                            'mobility': agent.mobility,
+                            'wealth': agent.wealth,
+                            'policy': policy
+                        })
+                    comparison_data[policy] = agents_data
+            return json_response(comparison_data)
+        else:
+            agents_data = []
+            for agent in current_model.agents:
+                agents_data.append({
+                    'bracket': agent.bracket,
+                    'mobility': agent.mobility,
+                    'wealth': agent.wealth,
+                    'policy': current_model.policy
+                })
+            return json_response(agents_data)
+
 
 @app.route('/api/data/gini', methods=['GET'])
 def get_gini_data():
     global current_model
     if current_model is None: return jsonify({'error': 'Model not initialized'}), 400
     with model_lock:
-        model_data = current_model.datacollector.get_model_vars_dataframe()
-        return json_response({'current': model_data['Gini'].tolist() if 'Gini' in model_data.columns else []})
+        if current_model.policy == "comparison" and hasattr(current_model, 'comparison_results') and current_model.comparison_results:
+            result = {}
+            policies = ["econophysics", "fascism", "communism", "capitalism"]
+            for policy in policies:
+                if policy in current_model.comparison_results:
+                    result[policy] = current_model.comparison_results[policy]['gini']
+            return json_response(result)
+        else:
+            model_data = current_model.datacollector.get_model_vars_dataframe()
+            if 'Gini' in model_data.columns:
+                gini_data = model_data['Gini'].tolist()
+            else:
+                gini_data = []
+            return json_response({'current': gini_data})
 
 @app.route('/api/data/total-wealth', methods=['GET'])
 def get_total_wealth_data():
     global current_model
     if current_model is None: return jsonify({'error': 'Model not initialized'}), 400
     with model_lock:
-        model_data = current_model.datacollector.get_model_vars_dataframe()
-        return json_response({'current': model_data['Total'].tolist() if 'Total' in model_data.columns else []})
+        if current_model.policy == "comparison" and hasattr(current_model, 'comparison_results') and current_model.comparison_results:
+            result = {}
+            policies = ["econophysics", "fascism", "communism", "capitalism"]
+            for policy in policies:
+                if policy in current_model.comparison_results:
+                    result[policy] = current_model.comparison_results[policy]['total']
+            return json_response(result)
+        else:
+            model_data = current_model.datacollector.get_model_vars_dataframe()
+            if 'Total' in model_data.columns:
+                total_data = model_data['Total'].tolist()
+            else:
+                total_data = []
+            return json_response({'current': total_data})
 
 @app.route('/api/status', methods=['GET'])
 def get_status():

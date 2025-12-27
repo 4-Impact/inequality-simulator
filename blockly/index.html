@@ -16,9 +16,17 @@
     
     /* Chat UI */
     #chat-container {
-        position: fixed; bottom: 20px; right: 20px; width: 350px;
-        background: #2d2d2d; border: 1px solid #404040; border-radius: 8px;
-        display: flex; flex-direction: column; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        position: fixed; 
+        top: 100px; 
+        right: 20px; 
+        width: 300px;
+        background: white; 
+        color: #333; 
+        border: 1px solid #404040; 
+        border-radius: 8px;
+        display: flex; 
+        flex-direction: column; 
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
         z-index: 1000;
     }
     #chat-header { padding: 10px; background: #2196f3; border-radius: 8px 8px 0 0; font-weight: bold; cursor: pointer; }
@@ -43,15 +51,25 @@
   <div id="blocklyDiv"></div>
 
   <div id="chat-container">
-    <div id="chat-header" onclick="toggleChat()">Policy Assistant (Click to Toggle)</div>
+    <div id="chat-header" onclick="toggleChat()">🤖 Policy Assistant</div>
     <div id="chat-body"></div>
     <div id="chat-input-area">
-        <input type="text" id="chat-input" placeholder="E.g., Create a UBI policy...">
+        <input type="text" id="chat-input" placeholder="E.g., Create a policy that...">
         <button id="send-btn" onclick="sendMessage()">Send</button>
     </div>
   </div>
 
   <xml xmlns="https://developers.google.com/blockly/xml" id="toolbox" style="display: none">
+    <category name="Model Logic" colour="230">
+      <block type="model_step_def"></block>
+      <block type="calc_metrics"></block>
+      <block type="calc_survival"></block>
+      <block type="policy_config_check"></block>
+      <block type="calc_startup_capital"></block>
+      <block type="execute_patron"></block>
+      <block type="agent_loop"></block>
+      <block type="collect_data"></block>
+    </category>
     <category name="Agent Logic" colour="120">
       <block type="agent_step_def"></block>
       <block type="update_history"></block>
@@ -70,43 +88,164 @@
     <category name="Custom" colour="290" id="customCategory"></category>
   </xml>
 
+  <script src="custom_blocks.js"></script>
+
   <script>
     // --- 1. BLOCKLY SETUP ---
     Blockly.Python.INDENT = '    ';
-    
-    // Define base blocks
-    Blockly.defineBlocksWithJsonArray([
-      { "type": "agent_step_def", "message0": "Agent Action %1 %2", "args0": [ { "type": "input_dummy" }, { "type": "input_statement", "name": "STEPS" } ], "colour": 120 },
-      { "type": "update_history", "message0": "Update History", "previousStatement": null, "nextStatement": null, "colour": 120 },
-      { "type": "check_policy", "message0": "If Policy is %1", "args0": [ { "type": "field_dropdown", "name": "OPTION", "options": [ ["Fascism", "fascism"], ["Capitalism", "capitalism"], ["Communism", "communism"], ["Econophysics", "econophysics"] ] } ], "message1": "%1", "args1": [{ "type": "input_statement", "name": "DO" }], "previousStatement": null, "nextStatement": null, "colour": 210 },
-      { "type": "execute_fascism", "message0": "Execute Fascism", "previousStatement": null, "nextStatement": null, "colour": 0 },
-      { "type": "execute_capitalism", "message0": "Execute Capitalism", "previousStatement": null, "nextStatement": null, "colour": 0 },
-      { "type": "execute_communism", "message0": "Execute Communism", "previousStatement": null, "nextStatement": null, "colour": 0 },
-      { "type": "execute_wealth_exchange", "message0": "Wealth Exchange", "previousStatement": null, "nextStatement": null, "colour": 0 },
-      { "type": "check_elite", "message0": "If Not Elite %1", "args0": [{ "type": "input_statement", "name": "DO" }], "previousStatement": null, "nextStatement": null, "colour": 210 },
-      { "type": "calc_agent_metrics", "message0": "Calc Metrics", "previousStatement": null, "nextStatement": null, "colour": 120 }
-    ]);
 
-    // Generators
-    Blockly.Python['agent_step_def'] = function(block) { return 'def step(self):\n    self.previous = self.bracket\n' + Blockly.Python.statementToCode(block, 'STEPS'); };
-    Blockly.Python['check_policy'] = function(block) { return 'if self.model.policy == "' + block.getFieldValue('OPTION') + '":\n' + Blockly.Python.statementToCode(block, 'DO'); };
+    // --- AGENT GENERATORS ---
+    Blockly.Python['agent_step_def'] = function(block) { 
+        return 'def step(self):\n    self.previous = self.bracket\n' + Blockly.Python.statementToCode(block, 'STEPS'); 
+    };
+    Blockly.Python['check_policy'] = function(block) { 
+        return 'if self.model.policy == "' + block.getFieldValue('OPTION') + '":\n' + Blockly.Python.statementToCode(block, 'DO'); 
+    };
     Blockly.Python['execute_fascism'] = function() { return 'Fascism().execute(self)\n'; };
     Blockly.Python['execute_capitalism'] = function() { return 'Capitalism().execute(self)\n'; };
     Blockly.Python['execute_communism'] = function() { return 'Communism().execute(self.model)\n'; };
     Blockly.Python['execute_wealth_exchange'] = function() { return 'WealthExchange().execute(self)\n'; };
-    Blockly.Python['check_elite'] = function(block) { return 'if self.party_elite == False:\n' + Blockly.Python.statementToCode(block, 'DO'); };
-    Blockly.Python['update_history'] = function() { return 'self.bracket_history.append(self.bracket)\nif len(self.bracket_history) > 20: self.bracket_history = self.bracket_history[-20:]\n'; };
-    Blockly.Python['calc_agent_metrics'] = function() { return 'if self.wealth < self.model.brackets[0]: self.bracket = "Lower"\nelif self.wealth >= self.model.brackets[1]: self.bracket = "Upper"\nelse: self.bracket = "Middle"\nself.mobility = calculate_bartholomew_mobility(self)\n'; };
+    Blockly.Python['check_elite'] = function(block) { 
+        return 'if self.party_elite == False:\n' + Blockly.Python.statementToCode(block, 'DO'); 
+    };
+    Blockly.Python['update_history'] = function() { 
+        return 'self.bracket_history.append(self.bracket)\nif len(self.bracket_history) > 20: self.bracket_history = self.bracket_history[-20:]\n'; 
+    };
+    Blockly.Python['calc_agent_metrics'] = function() { 
+        return 'if self.wealth < self.model.brackets[0]: self.bracket = "Lower"\nelif self.wealth >= self.model.brackets[1]: self.bracket = "Upper"\nelse: self.bracket = "Middle"\nself.mobility = calculate_bartholomew_mobility(self)\n'; 
+    };
+
+    // --- MODEL GENERATORS (Visualization) ---
+    Blockly.Python['model_step_def'] = function(block) {
+        return 'def model_step(self):\n' + Blockly.Python.statementToCode(block, 'STEPS');
+    };
+    Blockly.Python['calc_metrics'] = function() {
+        return 'self.brackets = calc_brackets(self)\nself.total = total_wealth(self)\n';
+    };
+    Blockly.Python['calc_survival'] = function() {
+        return 'exp_scale = np.mean([agent.wealth for agent in self.agents])\nif exp_scale > 1: self.survival_cost = expon.ppf(0.1, scale=exp_scale)\n';
+    };
+    Blockly.Python['policy_config_check'] = function(block) {
+        var option = block.getFieldValue('OPTION');
+        var check = (option === 'capitalism') ? 'self.policy == "capitalism"' : 'self.patron == True';
+        return 'if ' + check + ':\n' + Blockly.Python.statementToCode(block, 'DO');
+    };
+    Blockly.Python['calc_startup_capital'] = function() {
+        return 'Capitalism().calculate_initial_capital(self)\n';
+    };
+    Blockly.Python['execute_patron'] = function() {
+        return 'Patron().execute(self)\n';
+    };
+    Blockly.Python['agent_loop'] = function() {
+        return 'self.agents.shuffle_do("step")\n';
+    };
+    Blockly.Python['collect_data'] = function() {
+        return 'self.datacollector.collect(self)\n';
+    };
 
     var workspace = Blockly.inject('blocklyDiv', {
       toolbox: document.getElementById('toolbox'),
       scrollbars: true,
-      zoom: { controls: true, wheel: true, startScale: 0.8 },
+      zoom: { controls: true, wheel: true, startScale: 0.65 },
       theme: Blockly.Themes.Dark
     });
 
-    // Default Workspace XML
-    var startXml = '<xml><block type="agent_step_def" x="20" y="20"><statement name="STEPS"><block type="update_history"><next><block type="check_policy"><field name="OPTION">econophysics</field><statement name="DO"><block type="execute_wealth_exchange"></block></statement><next><block type="calc_agent_metrics"></block></next></block></next></block></statement></block></xml>';
+    // --- DEFAULT WORKSPACE XML ---
+    var startXml = `
+    <xml>
+        <block type="model_step_def" x="20" y="20">
+            <statement name="STEPS">
+                <block type="calc_metrics">
+                    <next>
+                        <block type="calc_survival">
+                            <next>
+                                <block type="policy_config_check">
+                                    <field name="OPTION">capitalism</field>
+                                    <statement name="DO">
+                                        <block type="calc_startup_capital"></block>
+                                    </statement>
+                                    <next>
+                                        <block type="policy_config_check">
+                                            <field name="OPTION">patron</field>
+                                            <statement name="DO">
+                                                <block type="execute_patron"></block>
+                                            </statement>
+                                            <next>
+                                                <block type="agent_loop">
+                                                    <next>
+                                                        <block type="collect_data"></block>
+                                                    </next>
+                                                </block>
+                                            </next>
+                                        </block>
+                                    </next>
+                                </block>
+                            </next>
+                        </block>
+                    </next>
+                </block>
+            </statement>
+        </block>
+
+        <block type="agent_step_def" x="450" y="20">
+            <statement name="STEPS">
+                <block type="update_history">
+                    <next>
+                        <block type="check_policy">
+                            <field name="OPTION">fascism</field>
+                            <statement name="DO">
+                                <block type="execute_fascism">
+                                    <next>
+                                        <block type="check_elite">
+                                            <statement name="DO">
+                                                <block type="execute_wealth_exchange"></block>
+                                            </statement>
+                                        </block>
+                                    </next>
+                                </block>
+                            </statement>
+                            <next>
+                                <block type="check_policy">
+                                    <field name="OPTION">capitalism</field>
+                                    <statement name="DO">
+                                        <block type="execute_capitalism">
+                                            <next>
+                                                <block type="execute_wealth_exchange"></block>
+                                            </next>
+                                        </block>
+                                    </statement>
+                                    <next>
+                                        <block type="check_policy">
+                                            <field name="OPTION">communism</field>
+                                            <statement name="DO">
+                                                <block type="execute_communism">
+                                                    <next>
+                                                        <block type="execute_wealth_exchange"></block>
+                                                    </next>
+                                                </block>
+                                            </statement>
+                                            <next>
+                                                <block type="check_policy">
+                                                    <field name="OPTION">econophysics</field>
+                                                    <statement name="DO">
+                                                        <block type="execute_wealth_exchange"></block>
+                                                    </statement>
+                                                    <next>
+                                                        <block type="calc_agent_metrics"></block>
+                                                    </next>
+                                                </block>
+                                            </next>
+                                        </block>
+                                    </next>
+                                </block>
+                            </next>
+                        </block>
+                    </next>
+                </block>
+            </statement>
+        </block>
+    </xml>`;
+    
     Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(startXml), workspace);
 
     // --- 2. CHAT & DYNAMIC BLOCK LOGIC ---
@@ -145,8 +284,6 @@
                 return;
             }
             
-            // Try to parse JSON from the response text
-            // The LLM might wrap JSON in ```json ... ``` or just return text
             var text = data.response;
             var jsonMatch = text.match(/\{[\s\S]*\}/);
             
@@ -171,23 +308,14 @@
     }
 
     function installPolicy(payload) {
-        // 1. Define Block
         Blockly.defineBlocksWithJsonArray([payload.block_json]);
-        
-        // 2. Define Generator
-        // Using eval here to register the function provided by SLM string
-        // Safety: Ensure SLM prompt forces valid JS assignment to Blockly.Python['type']
         try {
-            // We assume payload.block_generator is like: "Blockly.Python['my_block'] = function(block){...}"
             eval(payload.block_generator);
-            
-            // 3. Send Python Code to Backend
             fetch('/api/add_custom_policy', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ code: payload.python_code })
             }).then(() => {
-                // 4. Update Toolbox
                 var toolbox = document.getElementById('toolbox');
                 var customCat = document.getElementById('customCategory');
                 var newBlock = document.createElement('block');
@@ -196,7 +324,6 @@
                 workspace.updateToolbox(toolbox);
                 alert("Block Installed! Look in the 'Custom' category.");
             });
-            
         } catch(e) {
             console.error(e);
             alert("Failed to install block definition.");
