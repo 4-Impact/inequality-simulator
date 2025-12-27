@@ -21,7 +21,12 @@ def ingest_code():
         "model.py",
         "agent.py",
         "policyblocks.py",
-        "utilities.py"
+        "utilities.py",
+        "docs/app.js",
+        "docs/index.html",
+        "docs/landing.html",
+        "blockly/index.html",
+        "blockly/custom_blocks.js"
     ]
     
     # Check if files exist
