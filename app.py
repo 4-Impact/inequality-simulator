@@ -187,13 +187,28 @@ def step_model():
         current_model.datacollector.collect(current_model)
     return jsonify({'status': 'success'})
 
+# In app.py
+
 @app.route('/api/data/wealth-distribution', methods=['GET'])
 def get_wealth_distribution():
     global current_model
+    
     if current_model is None: return jsonify({'error': 'Model not initialized'}), 400
+    
     with model_lock:
-        wealth_vals = [agent.wealth for agent in current_model.agents]
-        return json_response({'current': wealth_vals})
+        # Check explicitly for comparison mode first
+        if current_model.policy == "comparison":
+            result = {}
+            policies = ["econophysics", "fascism", "communism", "capitalism"]
+            for policy in policies:
+                # Use the pre-calculated final_wealth from the results dict
+                if policy in current_model.comparison_results:
+                    result[policy] = current_model.comparison_results[policy]['final_wealth']
+            return json_response(result)
+        else:
+            # Single model mode
+            wealth_vals = [agent.wealth for agent in current_model.agents]
+            return json_response({'current': wealth_vals})
 
 @app.route('/api/data/mobility', methods=['GET'])
 def get_mobility_data():
