@@ -1,8 +1,4 @@
-#!/usr/bin/env python3
-"""
-Run script for the Inequality Simulator backend
-This replaces the Solara frontend with a Flask backend + vanilla JS frontend
-"""
+# tpike3/inequality-simulator/inequality-simulator-main/run.py
 
 import os
 import sys
@@ -12,19 +8,24 @@ import threading
 
 def run_server():
     """Run the Flask backend server"""
-    # Import the app and the reset function
-    from app import app, reset_logic_internal
+    # Import app and the setup functions
+    from app import app, init_rag, setup_simulation
     
-    # FIX: Force a logic reset every time the server starts
-    print("Resetting simulation logic to default...")
-    reset_logic_internal()
+    print("=" * 60)
+    print("Initializing Inequality Simulator Environment...")
+    print("=" * 60)
     
-    print("Starting Inequality Simulator Backend...")
-    print("Backend API will be available at: http://localhost:5000/api")
+    # 1. SETUP SIMULATION (This runs reset_logic_internal)
+    # This guarantees we start with the original version (no user logic)
+    setup_simulation()
+    
+    # 2. Initialize RAG Engine
+    init_rag()
+    
+    print("\nBackend API will be available at: http://localhost:5000/api")
     print("Frontend will be available at: http://localhost:5000")
     print("\nPress Ctrl+C to stop the server")
     
-    # Disable reloader to prevent double-execution/restarts
     app.run(debug=True, use_reloader=False, host='0.0.0.0', port=5000)
 
 def open_browser():
@@ -33,10 +34,6 @@ def open_browser():
     webbrowser.open('http://localhost:5000')
 
 if __name__ == "__main__":
-    print("=" * 60)
-    print("Inequality Simulator - Custom Frontend")
-    print("=" * 60)
-    
     # Start browser opening in a separate thread
     browser_thread = threading.Thread(target=open_browser)
     browser_thread.daemon = True

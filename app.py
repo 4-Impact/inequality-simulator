@@ -1,8 +1,4 @@
-"""
-Flask backend API for the Inequality Simulator
-Replaces Solara frontend with REST API endpoints
-Includes SLM/LLM Integration for Dynamic Policy Generation
-"""
+# tpike3/inequality-simulator/inequality-simulator-main/app.py
 
 from flask import Flask, jsonify, request, send_from_directory, Response
 from flask_cors import CORS
@@ -16,7 +12,7 @@ import sys
 
 # --- LLM / RAG Imports ---
 import chromadb
-from llama_index.core import VectorStoreIndex, StorageContext, Settings
+from llama_index.core import VectorStoreIndex, Settings
 from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.embeddings.ollama import OllamaEmbedding
 from llama_index.llms.ollama import Ollama
@@ -34,7 +30,7 @@ CORS(app, origins=['*'])
 # --- Global State ---
 current_model = None
 model_lock = threading.Lock()
-query_engine = None # Initialized on startup
+query_engine = None
 
 # --- Constants ---
 CUSTOM_POLICIES_FILE = 'custom_policies.py'
@@ -60,29 +56,29 @@ def init_rag():
         Settings.embed_model = OllamaEmbedding(model_name=model_name)
         Settings.llm = Ollama(model="dolphin-llama3:8b", request_timeout=120.0)
 
-        db = chromadb.PersistentClient(path="./chroma_db")
+        # Check in SLM folder or root
+        db_path = "./SLM/chroma_db" if os.path.exists("./SLM/chroma_db") else "./chroma_db"
+        print(f"Connecting to ChromaDB at {db_path}...")
+
+        db = chromadb.PersistentClient(path=db_path)
         chroma_collection = db.get_or_create_collection("mesa_repo")
         vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
         
-        # Load index from existing vector store
-        index = VectorStoreIndex.from_vector_store(
-            vector_store=vector_store,
-        )
+        index = VectorStoreIndex.from_vector_store(vector_store=vector_store)
         
-        # System prompt to guide the output format
+        # Robust System Prompt for Security & JSON
         system_prompt = (
-            "You are a policy assistant for a Python Mesa wealth inequality simulation. "
-            "When asked to create a policy, you MUST return a JSON object with 3 fields: "
-            "1. 'python_code': The Python class code (e.g., class MyPolicy: def execute(self, agent): ...). "
-            "2. 'block_json': The Blockly JSON definition. "
-            "3. 'block_generator': The Blockly Python generator JavaScript code. "
-            "Ensure the Python class uses 'agent.wealth' and 'agent.model' correctly based on the provided context."
+            "You are a secure Policy Generation Assistant for a Mesa-based Agent simulation. "
+            "Your goal is to interpret user policy ideas and convert them into executable Python code and Blockly definitions.\n\n"
+            "### STRICT SECURITY RULES ###\n"
+            "1. GENERATE ONLY PYTHON CODE. No bash, shell, or other languages.\n"
+            "2. DO NOT use these modules: os, sys, subprocess, shutil, requests, urllib, eval, exec.\n"
+            "3. Code must be a single class containing an `execute(self, agent)` method.\n\n"
+            "### OUTPUT FORMAT (JSON ONLY) ###\n"
+            "Return a raw JSON object (no markdown) with keys: 'python_code', 'block_json', 'block_generator'."
         )
         
-        query_engine = index.as_query_engine(
-            similarity_top_k=5,
-            system_prompt=system_prompt
-        )
+        query_engine = index.as_query_engine(similarity_top_k=5, system_prompt=system_prompt)
         print("RAG Engine Loaded Successfully.")
     except Exception as e:
         print(f"Warning: Failed to load RAG Engine. Chat features will not work. Error: {e}")
@@ -91,12 +87,10 @@ def init_rag():
 def reset_logic_internal():
     """Resets user_logic.py and custom_policies.py to default"""
     try:
-        # Reset Logic
         default_content = "HAS_CUSTOM_LOGIC = False\n\ndef step(self):\n    pass\n"
         with open(USER_LOGIC_FILE, 'w') as f:
             f.write(default_content)
         
-        # Reset Custom Policies
         with open(CUSTOM_POLICIES_FILE, 'w') as f:
             f.write("# Custom user-generated policies will be appended here\n\n")
             
@@ -105,6 +99,25 @@ def reset_logic_internal():
     except Exception as e:
         logger.error(f"Failed to reset logic: {e}")
         return False
+
+# --- NEW: Simulation Setup Function ---
+def setup_simulation():
+    """Forces a clean state for the simulation on startup"""
+    global current_model
+    
+    print("--- PERFORMING SYSTEM RESET ---")
+    # 1. Force Reset of User Logic
+    reset_logic_internal()
+    
+    # 2. Ensure Files Exist
+    if not os.path.exists(CUSTOM_POLICIES_FILE):
+        with open(CUSTOM_POLICIES_FILE, 'w') as f:
+            f.write("# Custom user-generated policies will be appended here\n\n")
+
+    # 3. Initialize Default Model
+    with model_lock:
+        current_model = WealthModel()
+        print("Default WealthModel initialized (Original Version).")
 
 # --- Standard Routes ---
 @app.route('/')
@@ -122,7 +135,6 @@ def blockly_home(): return send_from_directory('blockly', 'index.html')
 @app.route('/blockly/<path:filename>')
 def blockly_files(filename): return send_from_directory('blockly', filename)
 
-# --- Explanation Routes ---
 @app.route('/explain/<name>')
 def explain_template(name):
     if name == 'econophysics': return send_from_directory('explanatory/templates', 'index.html')
@@ -164,7 +176,7 @@ def initialize_model():
             patron=patron,
             seed=42,
         )
-    return jsonify({'status': 'initialized', 'policy': policy, 'population': population}), 200
+    return jsonify({'status': 'initialized', 'policy': policy}), 200
 
 @app.route('/api/step', methods=['POST'])
 def step_model():
@@ -175,109 +187,53 @@ def step_model():
         current_model.datacollector.collect(current_model)
     return jsonify({'status': 'success'})
 
-# --- Data Routes (Wealth, Mobility, Gini, Total) ---
 @app.route('/api/data/wealth-distribution', methods=['GET'])
 def get_wealth_distribution():
     global current_model
     if current_model is None: return jsonify({'error': 'Model not initialized'}), 400
     with model_lock:
-        if current_model.policy == "comparison" and hasattr(current_model, 'comparison_results') and current_model.comparison_results:
-            result = {}
-            policies = ["econophysics", "fascism", "communism", "capitalism"]
-            for policy in policies:
-                if policy in current_model.comparison_results:
-                    result[policy] = current_model.comparison_results[policy]['final_wealth']
-            return json_response(result)
-        else:
-            wealth_vals = [agent.wealth for agent in current_model.agents]
-            return json_response({'current': wealth_vals})
+        wealth_vals = [agent.wealth for agent in current_model.agents]
+        return json_response({'current': wealth_vals})
 
 @app.route('/api/data/mobility', methods=['GET'])
 def get_mobility_data():
     global current_model
     if current_model is None: return jsonify({'error': 'Model not initialized'}), 400
     with model_lock:
-        if current_model.policy == "comparison" and hasattr(current_model, 'comparison_models') and current_model.comparison_models:
-            comparison_data = {}
-            policies = ["econophysics", "fascism", "communism", "capitalism"]
-            
-            for policy in policies:
-                if policy in current_model.comparison_models:
-                    model = current_model.comparison_models[policy]
-                    agents_data = []
-                    for agent in model.agents:
-                        agents_data.append({
-                            'bracket': agent.bracket,
-                            'mobility': agent.mobility,
-                            'wealth': agent.wealth,
-                            'policy': policy
-                        })
-                    comparison_data[policy] = agents_data
-            return json_response(comparison_data)
-        else:
-            agents_data = []
-            for agent in current_model.agents:
-                agents_data.append({
-                    'bracket': agent.bracket,
-                    'mobility': agent.mobility,
-                    'wealth': agent.wealth,
-                    'policy': current_model.policy
-                })
-            return json_response(agents_data)
-
+        agents_data = []
+        for agent in current_model.agents:
+            agents_data.append({
+                'bracket': agent.bracket,
+                'mobility': agent.mobility,
+                'wealth': agent.wealth,
+                'policy': current_model.policy
+            })
+        return json_response(agents_data)
 
 @app.route('/api/data/gini', methods=['GET'])
 def get_gini_data():
     global current_model
     if current_model is None: return jsonify({'error': 'Model not initialized'}), 400
     with model_lock:
-        if current_model.policy == "comparison" and hasattr(current_model, 'comparison_results') and current_model.comparison_results:
-            result = {}
-            policies = ["econophysics", "fascism", "communism", "capitalism"]
-            for policy in policies:
-                if policy in current_model.comparison_results:
-                    result[policy] = current_model.comparison_results[policy]['gini']
-            return json_response(result)
-        else:
-            model_data = current_model.datacollector.get_model_vars_dataframe()
-            if 'Gini' in model_data.columns:
-                gini_data = model_data['Gini'].tolist()
-            else:
-                gini_data = []
-            return json_response({'current': gini_data})
+        model_data = current_model.datacollector.get_model_vars_dataframe()
+        gini_data = model_data['Gini'].tolist() if 'Gini' in model_data.columns else []
+        return json_response({'current': gini_data})
 
 @app.route('/api/data/total-wealth', methods=['GET'])
 def get_total_wealth_data():
     global current_model
     if current_model is None: return jsonify({'error': 'Model not initialized'}), 400
     with model_lock:
-        if current_model.policy == "comparison" and hasattr(current_model, 'comparison_results') and current_model.comparison_results:
-            result = {}
-            policies = ["econophysics", "fascism", "communism", "capitalism"]
-            for policy in policies:
-                if policy in current_model.comparison_results:
-                    result[policy] = current_model.comparison_results[policy]['total']
-            return json_response(result)
-        else:
-            model_data = current_model.datacollector.get_model_vars_dataframe()
-            if 'Total' in model_data.columns:
-                total_data = model_data['Total'].tolist()
-            else:
-                total_data = []
-            return json_response({'current': total_data})
+        model_data = current_model.datacollector.get_model_vars_dataframe()
+        total_data = model_data['Total'].tolist() if 'Total' in model_data.columns else []
+        return json_response({'current': total_data})
 
 @app.route('/api/status', methods=['GET'])
 def get_status():
     global current_model
     if current_model is None: return jsonify({'initialized': False})
     with model_lock:
-        return json_response({
-            'initialized': True, 
-            'policy': current_model.policy, 
-            'population': current_model.population
-        })
-
-# --- Logic & Chat API ---
+        return json_response({'initialized': True, 'policy': current_model.policy})
 
 @app.route('/api/reset_code', methods=['POST'])
 def reset_code():
@@ -287,82 +243,42 @@ def reset_code():
 
 @app.route('/api/add_custom_policy', methods=['POST'])
 def add_custom_policy():
-    """Appends a new Python class to custom_policies.py"""
     try:
         data = request.get_json()
         python_code = data.get('code', '')
-        
-        if not python_code:
-            return jsonify({'error': 'No code provided'}), 400
-
+        if not python_code: return jsonify({'error': 'No code provided'}), 400
         with open(CUSTOM_POLICIES_FILE, 'a') as f:
             f.write("\n\n" + python_code + "\n")
-            
-        return jsonify({'status': 'success', 'message': 'Policy added to backend registry.'})
+        return jsonify({'status': 'success', 'message': 'Policy added.'})
     except Exception as e:
-        logger.error(f"Failed to add custom policy: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/update_code', methods=['POST'])
 def update_code():
-    """Updates user_logic.py with the new step function + imports custom policies"""
     try:
         data = request.get_json()
         raw_code = data.get('code')
-        
-        # Inject Custom Policies Import
         file_content = (
             "HAS_CUSTOM_LOGIC = True\n\n"
             "from policyblocks import *\n"
             "from utilities import *\n"
-            "try:\n"
-            "    from custom_policies import *\n"
-            "except ImportError:\n"
-            "    pass\n\n" + raw_code
+            "try:\n    from custom_policies import *\nexcept ImportError:\n    pass\n\n" + raw_code
         )
-        
         with open(USER_LOGIC_FILE, 'w') as f:
             f.write(file_content)
-            
         return jsonify({'status': 'success', 'message': 'Logic updated!'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/chat', methods=['POST'])
 def chat_endpoint():
-    """Chat endpoint for the SLM"""
     global query_engine
-    if query_engine is None:
-        return jsonify({'error': 'RAG Engine not initialized'}), 503
-        
+    if query_engine is None: return jsonify({'error': 'RAG Engine not initialized'}), 503
     try:
         data = request.get_json()
         user_query = data.get('message', '')
-        
-        # Append specific instruction to ensure JSON output
-        full_query = (
-            user_query + 
-            " Generate a complete Python class for this policy, the Blockly JSON definition, "
-            "and the Blockly Python generator code. Format the response as valid JSON."
-        )
-        
-        response = query_engine.query(full_query)
+        response = query_engine.query(user_query)
         return jsonify({'response': str(response)})
     except Exception as e:
         logger.error(f"Chat error: {e}")
         return jsonify({'error': str(e)}), 500
-
-if __name__ == '__main__':
-    # Initialize RAG before server start
-    init_rag()
-    
-    # Ensure custom policies file exists
-    if not os.path.exists(CUSTOM_POLICIES_FILE):
-        with open(CUSTOM_POLICIES_FILE, 'w') as f:
-            f.write("# Custom user-generated policies will be appended here\n\n")
-
-    current_model = WealthModel()
-    reset_logic_internal()
-    
-    port = int(os.environ.get('PORT', 5000))
-    app.run(debug=False, use_reloader=False, host='0.0.0.0', port=port)

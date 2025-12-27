@@ -1,100 +1,11 @@
-// tpike3/inequality-simulator/inequality-simulator-code_viz/blockly/custom_blocks.js
+// tpike3/inequality-simulator/inequality-simulator-main/blockly/custom_blocks.js
 
 // Define the color scheme to match your app
-const BLOCK_COLOR_MODEL = 230;
 const BLOCK_COLOR_AGENT = 120;
 const BLOCK_COLOR_POLICY = 0;
 const BLOCK_COLOR_LOGIC = 210;
 
 Blockly.defineBlocksWithJsonArray([
-  // --- MODEL BLOCKS ---
-  {
-    "type": "model_step_def",
-    "message0": "Model Step (Orchestrator) %1 %2",
-    "args0": [
-      { "type": "input_dummy" },
-      { "type": "input_statement", "name": "STEPS" }
-    ],
-    "colour": BLOCK_COLOR_MODEL,
-    "tooltip": "The main step function in model.py",
-    "helpUrl": ""
-  },
-  {
-    "type": "calc_metrics",
-    "message0": "Calculate Metrics (Wealth Classes, Total Wealth)",
-    "previousStatement": null,
-    "nextStatement": null,
-    "colour": BLOCK_COLOR_MODEL,
-    "tooltip": "Calculates wealth brackets and total wealth",
-    "helpUrl": ""
-  },
-  {
-    "type": "calc_survival",
-    "message0": "Calculate Survival Cost",
-    "previousStatement": null,
-    "nextStatement": null,
-    "colour": BLOCK_COLOR_MODEL,
-    "tooltip": "Updates survival cost based on inflation",
-    "helpUrl": ""
-  },
-  {
-    "type": "policy_config_check",
-    "message0": "If Policy is %1",
-    "args0": [
-      {
-        "type": "field_dropdown",
-        "name": "OPTION",
-        "options": [
-          ["Capitalism", "capitalism"],
-          ["Patron System", "patron"]
-        ]
-      }
-    ],
-    "message1": "%1",
-    "args1": [{ "type": "input_statement", "name": "DO" }],
-    "previousStatement": null,
-    "nextStatement": null,
-    "colour": BLOCK_COLOR_LOGIC,
-    "tooltip": "Checks configuration flags",
-    "helpUrl": ""
-  },
-  {
-    "type": "calc_startup_capital",
-    "message0": "Calculate Initial Startup Capital",
-    "previousStatement": null,
-    "nextStatement": null,
-    "colour": BLOCK_COLOR_POLICY,
-    "tooltip": "Capitalism specific logic",
-    "helpUrl": ""
-  },
-  {
-    "type": "execute_patron",
-    "message0": "Execute Patron Logic",
-    "previousStatement": null,
-    "nextStatement": null,
-    "colour": BLOCK_COLOR_POLICY,
-    "tooltip": "Wealthiest 20% give to others",
-    "helpUrl": ""
-  },
-  {
-    "type": "agent_loop",
-    "message0": "Shuffle and Step All Agents",
-    "previousStatement": null,
-    "nextStatement": null,
-    "colour": BLOCK_COLOR_MODEL,
-    "tooltip": "Iterates through all agents in random order",
-    "helpUrl": ""
-  },
-  {
-    "type": "collect_data",
-    "message0": "Collect Data (Gini, Mobility)",
-    "previousStatement": null,
-    "nextStatement": null,
-    "colour": BLOCK_COLOR_MODEL,
-    "tooltip": "Mesa DataCollector",
-    "helpUrl": ""
-  },
-
   // --- AGENT BLOCKS ---
   {
     "type": "agent_step_def",
@@ -113,7 +24,7 @@ Blockly.defineBlocksWithJsonArray([
     "previousStatement": null,
     "nextStatement": null,
     "colour": BLOCK_COLOR_AGENT,
-    "tooltip": "",
+    "tooltip": "Updates the history of wealth brackets for the agent",
     "helpUrl": ""
   },
   {
@@ -155,7 +66,7 @@ Blockly.defineBlocksWithJsonArray([
     "previousStatement": null,
     "nextStatement": null,
     "colour": BLOCK_COLOR_LOGIC,
-    "tooltip": "",
+    "tooltip": "Check if agent is not part of the elite",
     "helpUrl": ""
   },
   {
