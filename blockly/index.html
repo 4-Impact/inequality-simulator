@@ -5,6 +5,8 @@
   <title>Inequality Simulator - Policy Editor</title>
   <script src="https://unpkg.com/blockly/blockly.min.js"></script>
   <script src="https://unpkg.com/blockly/python_compressed.js"></script>
+  <script src="custom_blocks.js"></script>
+  <script src="user_blocks.js"></script> 
   <style>
     body { background-color: #1a1a1a; color: #fff; font-family: Arial, sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; }
     h1 { padding: 10px 20px; margin: 0; background-color: #2c3e50; font-size: 1.2rem; }
@@ -33,7 +35,7 @@
   </style>
 </head>
 <body>
-  <h1>Policy Editor (Update Policies Agents Follow)</h1>
+  <h1>Policy Editor</h1>
   <div class="header">
     <button id="saveBtn" onclick="generateAndSave()">Update Agent Logic</button>
     <button id="resetBtn" onclick="resetLogic()">Reset to Default</button>
@@ -205,48 +207,119 @@
             }
             
             var text = data.response;
-            var jsonMatch = text.match(/\{[\s\S]*\}/);
-            
-            if (jsonMatch) {
-                try {
-                    var payload = JSON.parse(jsonMatch[0]);
+            // 1. Clean Markdown
+            var cleanText = text.replace(/```json\n?|```/g, "").trim();
+
+            try {
+                var payload = JSON.parse(cleanText);
+
+                // 2. Handle List vs Object
+                if (Array.isArray(payload)) {
+                    payload = payload[0];
+                }
+
+                // 3. Handle Nested String JSON
+                if (typeof payload.block_json === 'string') {
+                    payload.block_json = JSON.parse(payload.block_json);
+                }
+                
+                // 4. AUTO-FIX: Force Statement Block (Crucial for your issue)
+                if (payload.block_json.output !== undefined) {
+                    delete payload.block_json.output;
+                    payload.block_json.previousStatement = null;
+                    payload.block_json.nextStatement = null;
+                    // Fix generator to return string instead of tuple
+                    payload.block_generator = payload.block_generator.replace(/return\s*\[(.*?),.*\];/g, "return $1 + '\\n';");
+                }
+
+                if (payload.block_json && payload.python_code) {
                     addMessage("I generated a new policy block for you.", 'bot');
                     
                     var btn = document.createElement('button');
                     btn.className = 'install-btn';
-                    btn.innerText = "Install Block: " + (payload.block_json.type || "New Policy");
-                    btn.onclick = function() { installPolicy(payload); btn.disabled = true; btn.innerText = "Installed"; };
+                    var blockType = payload.block_json.type || "custom_policy";
+                    btn.innerText = "Install Block: " + blockType;
+                    
+                    btn.onclick = function() { 
+                        installPolicy(payload); 
+                        btn.disabled = true; 
+                        btn.innerText = "Installed (Look in Custom)"; 
+                    };
                     document.getElementById('chat-body').appendChild(btn);
-                } catch(e) {
-                    addMessage(text, 'bot');
+                } else {
+                    addMessage("I could not generate a valid block configuration.", 'bot');
                 }
-            } else {
-                addMessage(text, 'bot');
+            } catch(e) {
+                console.error("Parsing Error:", e);
+                addMessage("Error parsing AI response.", 'bot');
             }
         })
-        .catch(e => addMessage("Connection Error", 'bot'));
+        .catch(e => {
+            console.error(e);
+            addMessage("Connection Error", 'bot');
+        });
     }
 
     function installPolicy(payload) {
+        // 1. AUTO-FIX: Force Statement Block Structure
+        // (Ensures the block snaps into the loop)
+        if (payload.block_json.output !== undefined) {
+             delete payload.block_json.output;
+             payload.block_json.previousStatement = null;
+             payload.block_json.nextStatement = null;
+        }
+
+        // 2. AUTO-FIX: Force Generator to Return String (Not Array)
+        // (Ensures "Update Agent Logic" doesn't crash)
+        if (payload.block_json.previousStatement === null) {
+            // Regex explanation: matches "return [ code, order ];" regardless of whitespace/newlines
+            // and replaces it with "return code + '\n';"
+            payload.block_generator = payload.block_generator.replace(
+                /return\s*\[\s*([\s\S]*?)\s*,[\s\S]*?\];?/g, 
+                "return $1 + '\\n';"
+            );
+        }
+
+        // 3. Define the block locally
         Blockly.defineBlocksWithJsonArray([payload.block_json]);
         try {
             eval(payload.block_generator);
-            fetch('/api/add_custom_policy', {
+            
+            // 4. Save Python Logic (Backend)
+            var p1 = fetch('/api/add_custom_policy', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ code: payload.python_code })
-            }).then(() => {
+            });
+
+            // 5. Save Block Definition (Frontend persistence)
+            var p2 = fetch('/api/save_block_definition', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ 
+                    block_json: payload.block_json,
+                    block_generator: payload.block_generator
+                })
+            });
+
+            Promise.all([p1, p2]).then(() => {
                 var toolbox = document.getElementById('toolbox');
                 var customCat = document.getElementById('customCategory');
-                var newBlock = document.createElement('block');
-                newBlock.setAttribute('type', payload.block_json.type);
-                customCat.appendChild(newBlock);
-                workspace.updateToolbox(toolbox);
-                alert("Block Installed! Look in the 'Custom' category.");
-            });
+                
+                // Only add if not already there to prevent duplicates
+                if (!document.querySelector(`block[type="${payload.block_json.type}"]`)) {
+                    var newBlock = document.createElement('block');
+                    newBlock.setAttribute('type', payload.block_json.type);
+                    customCat.appendChild(newBlock);
+                    workspace.updateToolbox(toolbox);
+                }
+                
+                alert("Block Installed Successfully!\n\nCheck the 'Custom' category.");
+            }).catch(e => alert("Error saving block to server: " + e));
+
         } catch(e) {
             console.error(e);
-            alert("Failed to install block definition.");
+            alert("Failed to install block definition: " + e);
         }
     }
 

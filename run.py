@@ -9,7 +9,7 @@ import threading
 def run_server():
     """Run the Flask backend server"""
     # Import app and the setup functions
-    from app import app, init_rag, setup_simulation
+    from app import app, init_gemini, setup_simulation
     
     print("=" * 60)
     print("Initializing Inequality Simulator Environment...")
@@ -20,7 +20,7 @@ def run_server():
     setup_simulation()
     
     # 2. Initialize RAG Engine
-    init_rag()
+    init_gemini()
     
     print("\nBackend API will be available at: http://localhost:5000/api")
     print("Frontend will be available at: http://localhost:5000")
