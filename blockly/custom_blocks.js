@@ -1,10 +1,11 @@
 // tpike3/inequality-simulator/inequality-simulator-main/blockly/custom_blocks.js
 
-// Define the color scheme to match your app
+// 1. Define the color scheme
 const BLOCK_COLOR_AGENT = 120;
 const BLOCK_COLOR_POLICY = 0;
 const BLOCK_COLOR_LOGIC = 210;
 
+// 2. Define the Visual Blocks (JSON)
 Blockly.defineBlocksWithJsonArray([
   // --- AGENT BLOCKS ---
   {
@@ -15,8 +16,7 @@ Blockly.defineBlocksWithJsonArray([
       { "type": "input_statement", "name": "STEPS" }
     ],
     "colour": BLOCK_COLOR_AGENT,
-    "tooltip": "The logic running inside every agent per turn",
-    "helpUrl": ""
+    "tooltip": "The logic running inside every agent per turn"
   },
   {
     "type": "update_history",
@@ -24,8 +24,7 @@ Blockly.defineBlocksWithJsonArray([
     "previousStatement": null,
     "nextStatement": null,
     "colour": BLOCK_COLOR_AGENT,
-    "tooltip": "Updates the history of wealth brackets for the agent",
-    "helpUrl": ""
+    "tooltip": "Updates the history of wealth brackets for the agent"
   },
   {
     "type": "check_policy",
@@ -47,8 +46,7 @@ Blockly.defineBlocksWithJsonArray([
     "previousStatement": null,
     "nextStatement": null,
     "colour": BLOCK_COLOR_LOGIC,
-    "tooltip": "Checks the global policy setting",
-    "helpUrl": ""
+    "tooltip": "Checks the global policy setting"
   },
   {
     "type": "execute_fascism",
@@ -56,8 +54,7 @@ Blockly.defineBlocksWithJsonArray([
     "previousStatement": null,
     "nextStatement": null,
     "colour": BLOCK_COLOR_POLICY,
-    "tooltip": "Pay tax to elites",
-    "helpUrl": ""
+    "tooltip": "Pay tax to elites"
   },
   {
     "type": "check_elite",
@@ -66,8 +63,7 @@ Blockly.defineBlocksWithJsonArray([
     "previousStatement": null,
     "nextStatement": null,
     "colour": BLOCK_COLOR_LOGIC,
-    "tooltip": "Check if agent is not part of the elite",
-    "helpUrl": ""
+    "tooltip": "Check if agent is not part of the elite"
   },
   {
     "type": "execute_wealth_exchange",
@@ -75,8 +71,7 @@ Blockly.defineBlocksWithJsonArray([
     "previousStatement": null,
     "nextStatement": null,
     "colour": BLOCK_COLOR_POLICY,
-    "tooltip": "Standard exchange + Survival Cost + Thrive Cost",
-    "helpUrl": ""
+    "tooltip": "Standard exchange + Survival Cost + Thrive Cost"
   },
   {
     "type": "execute_capitalism",
@@ -84,8 +79,7 @@ Blockly.defineBlocksWithJsonArray([
     "previousStatement": null,
     "nextStatement": null,
     "colour": BLOCK_COLOR_POLICY,
-    "tooltip": "Invest in innovation if wealth > capital",
-    "helpUrl": ""
+    "tooltip": "Invest in innovation if wealth > capital"
   },
   {
     "type": "execute_communism",
@@ -93,8 +87,7 @@ Blockly.defineBlocksWithJsonArray([
     "previousStatement": null,
     "nextStatement": null,
     "colour": BLOCK_COLOR_POLICY,
-    "tooltip": "Redistribute all wealth equally",
-    "helpUrl": ""
+    "tooltip": "Redistribute all wealth equally"
   },
   {
     "type": "calc_agent_metrics",
@@ -102,7 +95,36 @@ Blockly.defineBlocksWithJsonArray([
     "previousStatement": null,
     "nextStatement": null,
     "colour": BLOCK_COLOR_AGENT,
-    "tooltip": "Determine Lower/Middle/Upper and calc mobility score",
-    "helpUrl": ""
+    "tooltip": "Determine Lower/Middle/Upper and calc mobility score"
   }
 ]);
+
+// 3. Define the Python Generators (Logic)
+// These translate the blocks into Python code.
+
+Blockly.Python['agent_step_def'] = function(block) { 
+    var branch = Blockly.Python.statementToCode(block, 'STEPS');
+    if (!branch) branch = '    pass\n';
+    return 'def step(self):\n    self.previous = self.bracket\n' + branch; 
+};
+
+Blockly.Python['check_policy'] = function(block) { 
+    return 'if self.model.policy == "' + block.getFieldValue('OPTION') + '":\n' + Blockly.Python.statementToCode(block, 'DO'); 
+};
+
+Blockly.Python['check_elite'] = function(block) { 
+    return 'if self.party_elite == False:\n' + Blockly.Python.statementToCode(block, 'DO'); 
+};
+
+Blockly.Python['execute_fascism'] = function() { return 'Fascism().execute(self)\n'; };
+Blockly.Python['execute_capitalism'] = function() { return 'Capitalism().execute(self)\n'; };
+Blockly.Python['execute_communism'] = function() { return 'Communism().execute(self.model)\n'; };
+Blockly.Python['execute_wealth_exchange'] = function() { return 'WealthExchange().execute(self)\n'; };
+
+Blockly.Python['update_history'] = function() { 
+    return 'self.bracket_history.append(self.bracket)\nif len(self.bracket_history) > 20: self.bracket_history = self.bracket_history[-20:]\n'; 
+};
+
+Blockly.Python['calc_agent_metrics'] = function() { 
+    return 'if self.wealth < self.model.brackets[0]: self.bracket = "Lower"\nelif self.wealth >= self.model.brackets[1]: self.bracket = "Upper"\nelse: self.bracket = "Middle"\nself.mobility = calculate_bartholomew_mobility(self)\n'; 
+};
