@@ -8,7 +8,7 @@ node_modules/
 .ipynb_checkpoints/*
 */.ipynb_checkpoints
 *.tsbuildinfo
-inequality_simulator/labextension
+.env
 
 
 # Integration tests
