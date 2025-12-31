@@ -102,29 +102,32 @@ Blockly.defineBlocksWithJsonArray([
 // 3. Define the Python Generators (Logic)
 // These translate the blocks into Python code.
 
-Blockly.Python['agent_step_def'] = function(block) { 
+// FIX: Detect correct generator location for modern Blockly (v10+)
+var pythonGenerator = Blockly.Python.forBlock || Blockly.Python;
+
+pythonGenerator['agent_step_def'] = function(block) { 
     var branch = Blockly.Python.statementToCode(block, 'STEPS');
     if (!branch) branch = '    pass\n';
     return 'def step(self):\n    self.previous = self.bracket\n' + branch; 
 };
 
-Blockly.Python['check_policy'] = function(block) { 
+pythonGenerator['check_policy'] = function(block) { 
     return 'if self.model.policy == "' + block.getFieldValue('OPTION') + '":\n' + Blockly.Python.statementToCode(block, 'DO'); 
 };
 
-Blockly.Python['check_elite'] = function(block) { 
+pythonGenerator['check_elite'] = function(block) { 
     return 'if self.party_elite == False:\n' + Blockly.Python.statementToCode(block, 'DO'); 
 };
 
-Blockly.Python['execute_fascism'] = function() { return 'Fascism().execute(self)\n'; };
-Blockly.Python['execute_capitalism'] = function() { return 'Capitalism().execute(self)\n'; };
-Blockly.Python['execute_communism'] = function() { return 'Communism().execute(self.model)\n'; };
-Blockly.Python['execute_wealth_exchange'] = function() { return 'WealthExchange().execute(self)\n'; };
+pythonGenerator['execute_fascism'] = function() { return 'Fascism().execute(self)\n'; };
+pythonGenerator['execute_capitalism'] = function() { return 'Capitalism().execute(self)\n'; };
+pythonGenerator['execute_communism'] = function() { return 'Communism().execute(self.model)\n'; };
+pythonGenerator['execute_wealth_exchange'] = function() { return 'WealthExchange().execute(self)\n'; };
 
-Blockly.Python['update_history'] = function() { 
+pythonGenerator['update_history'] = function() { 
     return 'self.bracket_history.append(self.bracket)\nif len(self.bracket_history) > 20: self.bracket_history = self.bracket_history[-20:]\n'; 
 };
 
-Blockly.Python['calc_agent_metrics'] = function() { 
+pythonGenerator['calc_agent_metrics'] = function() { 
     return 'if self.wealth < self.model.brackets[0]: self.bracket = "Lower"\nelif self.wealth >= self.model.brackets[1]: self.bracket = "Upper"\nelse: self.bracket = "Middle"\nself.mobility = calculate_bartholomew_mobility(self)\n'; 
 };

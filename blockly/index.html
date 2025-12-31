@@ -252,8 +252,16 @@
             );
         }
 
+        if (payload.block_generator.includes("Blockly.Python['")) {
+            payload.block_generator = payload.block_generator.replace(
+                /Blockly\.Python\['/g, 
+                "Blockly.Python.forBlock['"
+            );
+        }
+
         Blockly.defineBlocksWithJsonArray([payload.block_json]);
         try {
+            // Now eval the corrected code
             eval(payload.block_generator);
             
             var p1 = fetch('/api/add_custom_policy', {
@@ -267,7 +275,7 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ 
                     block_json: payload.block_json,
-                    block_generator: payload.block_generator
+                    block_generator: payload.block_generator // Saves the CORRECTED code
                 })
             });
 

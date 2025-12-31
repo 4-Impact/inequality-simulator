@@ -9,6 +9,7 @@ import time
 import logging
 import os
 import sys
+import re
 
 """
 # --- LLM / RAG Imports ---
@@ -384,28 +385,73 @@ def save_block_definition():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+def sanitize_ai_response(json_text):
+    """
+    Scans the AI's JSON output for common Mesa 3.0 and Scope errors
+    and fixes them automatically before sending to the frontend.
+    """
+    try:
+        # 1. Clean Markdown wrappers if present
+        clean_text = re.sub(r'^```json\s*|```\s*$', '', json_text.strip(), flags=re.MULTILINE)
+        data = json.loads(clean_text)
+
+        # --- FIX 1: Mesa 3.0 Compatibility (model.schedule.agents -> model.agents) ---
+        if 'python_code' in data:
+            if 'model.schedule.agents' in data['python_code']:
+                print("LOG: Auto-fixing Mesa 3.0 'schedule.agents' error.")
+                data['python_code'] = data['python_code'].replace('model.schedule.agents', 'model.agents')
+
+        # --- FIX 2: Scope Error (model -> self.model) in Block Generator ---
+        # The AI often writes ".execute(self, model)" but 'model' is undefined in user_logic.py
+        if 'block_generator' in data:
+            gen_code = data['block_generator']
+            
+            # Regex to find .execute(self, model) and turn it into .execute(self, self.model)
+            # This looks for the pattern: .execute(self, model)
+            if re.search(r'\.execute\(\s*self\s*,\s*model\s*\)', gen_code):
+                print("LOG: Auto-fixing Scope error 'model' -> 'self.model'")
+                data['block_generator'] = re.sub(
+                    r'\.execute\(\s*self\s*,\s*model\s*\)', 
+                    '.execute(self, self.model)', 
+                    gen_code
+                )
+
+        return json.dumps(data)
+
+    except Exception as e:
+        print(f"Sanitization Warning: Could not parse/fix JSON: {e}")
+        return json_text
+    
 @app.route('/api/chat', methods=['POST'])
 def chat_endpoint():
     global gemini_client
-    if gemini_client is None: return jsonify({'error': 'Gemini not initialized (Check API Key)'}), 503
+    if gemini_client is None: return jsonify({'error': 'Gemini not initialized'}), 503
     try:
         data = request.get_json()
         user_query = data.get('message', '')
         
-        # UPDATED PROMPT: Enforces Statement Blocks (Action) instead of Value Blocks (Data)
+        # UPDATED PROMPT: Specific Rules for Mesa 3 & Scope
         prompt = (
-            "You are a Policy Generator for a Mesa Agent simulation. "
+            "You are a Policy Generator for a Mesa Agent simulation (Mesa 3.0+). "
             "Convert the user's idea into a Python class and a Blockly block definition.\n\n"
-            "### BLOCK DEFINITION RULES (CRITICAL) ###\n"
-            "1. The block must be an ACTION block (Statement).\n"
-            "2. JSON must include: `\"previousStatement\": null, \"nextStatement\": null`.\n"
-            "3. JSON must NOT include `\"output\"`.\n"
-            "4. Generator must return a CODE STRING (ending in \\n). Do NOT return a tuple/array like [code, order].\n\n"
+            
+            "### CODING RULES (CRITICAL) ###\n"
+            "1. **MESA 3.0 COMPATIBILITY**: `model.schedule.agents` DOES NOT EXIST. Use `model.agents` (it is a list).\n"
+            "2. **SCOPE SAFETY**: This code runs inside `Agent.step(self)`. The variable `model` is NOT global. You MUST use `self.model`.\n"
+            "3. **GENERATOR**: In the block generator, pass `self.model` to your class, not `model`. Ex: `MyPol().execute(self, self.model)`.\n\n"
+            "4. **MODEL AND AGENT ATTRIBUTES**: Check ALL attributes added to the created policy blocks to MAKE SURE THEY EXIST, for example"
+            "if the user says survival threshold the model attribute that agent would reference  would be self.model.survival_cost."
+
+            "### BLOCK DEFINITION RULES ###\n"
+            "1. Block must be an ACTION (Statement).\n"
+            "2. JSON: `\"previousStatement\": null, \"nextStatement\": null`.\n"
+            "3. GENERATOR SYNTAX: Use `Blockly.Python.forBlock['name'] = ...`.\n\n"
+            
             "### OUTPUT FORMAT (Strict JSON) ###\n"
             "{\n"
-            '  "python_code": "class MyPolicy:\\n    def execute(self, agent):\\n        agent.wealth += 1",\n'
+            '  "python_code": "class MyPolicy:\\n    def execute(self, agent, model):\\n        # Use model.agents, NOT schedule.agents\\n        pass",\n'
             '  "block_json": { "type": "my_policy", "message0": "Execute My Policy", "previousStatement": null, "nextStatement": null, "colour": 0 },\n'
-            '  "block_generator": "Blockly.Python[\'my_policy\'] = function(block) { return \'MyPolicy().execute(self)\\n\'; };"\n'
+            '  "block_generator": "Blockly.Python.forBlock[\'my_policy\'] = function(block) { return \'MyPolicy().execute(self, self.model)\\n\'; };"\n'
             "}\n\n"
             f"User Idea: {user_query}"
         )
@@ -413,12 +459,14 @@ def chat_endpoint():
         response = gemini_client.models.generate_content(
             model='gemini-2.0-flash',
             contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type='application/json'
-            )
+            config=types.GenerateContentConfig(response_mime_type='application/json')
         )
         
-        return jsonify({'response': response.text})
+        # Run the Auto-Fixer before sending back to user
+        final_json = sanitize_ai_response(response.text)
+        
+        return jsonify({'response': final_json})
+
     except Exception as e:
-        logger.error(f"Chat error: {e}")
+        print(e)
         return jsonify({'error': str(e)}), 500
