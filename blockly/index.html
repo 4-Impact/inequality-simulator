@@ -3,8 +3,20 @@
 <head>
   <meta charset="utf-8">
   <title>Inequality Simulator - Policy Editor</title>
+  
   <script src="https://unpkg.com/blockly/blockly.min.js"></script>
+  
   <script src="https://unpkg.com/blockly/python_compressed.js"></script>
+  
+  <script>
+    if (Blockly.Python) {
+        Blockly.Python.INDENT = '    ';
+    }
+  </script>
+
+  <script src="custom_blocks.js"></script>
+  <script src="user_blocks.js"></script> 
+  
   <style>
     body { background-color: #1a1a1a; color: #fff; font-family: Arial, sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; }
     h1 { padding: 10px 20px; margin: 0; background-color: #2c3e50; font-size: 1.2rem; }
@@ -70,33 +82,10 @@
     <category name="Custom" colour="290" id="customCategory"></category>
   </xml>
 
-  <script src="custom_blocks.js"></script>
-
   <script>
-    // --- 1. BLOCKLY SETUP ---
-    Blockly.Python.INDENT = '    ';
-
-    // --- AGENT GENERATORS ---
-    Blockly.Python['agent_step_def'] = function(block) { 
-        return 'def step(self):\n    self.previous = self.bracket\n' + Blockly.Python.statementToCode(block, 'STEPS'); 
-    };
-    Blockly.Python['check_policy'] = function(block) { 
-        return 'if self.model.policy == "' + block.getFieldValue('OPTION') + '":\n' + Blockly.Python.statementToCode(block, 'DO'); 
-    };
-    Blockly.Python['execute_fascism'] = function() { return 'Fascism().execute(self)\n'; };
-    Blockly.Python['execute_capitalism'] = function() { return 'Capitalism().execute(self)\n'; };
-    Blockly.Python['execute_communism'] = function() { return 'Communism().execute(self.model)\n'; };
-    Blockly.Python['execute_wealth_exchange'] = function() { return 'WealthExchange().execute(self)\n'; };
-    Blockly.Python['check_elite'] = function(block) { 
-        return 'if self.party_elite == False:\n' + Blockly.Python.statementToCode(block, 'DO'); 
-    };
-    Blockly.Python['update_history'] = function() { 
-        return 'self.bracket_history.append(self.bracket)\nif len(self.bracket_history) > 20: self.bracket_history = self.bracket_history[-20:]\n'; 
-    };
-    Blockly.Python['calc_agent_metrics'] = function() { 
-        return 'if self.wealth < self.model.brackets[0]: self.bracket = "Lower"\nelif self.wealth >= self.model.brackets[1]: self.bracket = "Upper"\nelse: self.bracket = "Middle"\nself.mobility = calculate_bartholomew_mobility(self)\n'; 
-    };
-
+    // --- 5. WORKSPACE SETUP ---
+    // (Note: Generators are now loaded from custom_blocks.js)
+    
     var workspace = Blockly.inject('blocklyDiv', {
       toolbox: document.getElementById('toolbox'),
       scrollbars: true,
@@ -104,7 +93,7 @@
       theme: Blockly.Themes.Dark
     });
 
-    // --- DEFAULT WORKSPACE XML (Reflecting agent.py logic) ---
+    // --- DEFAULT XML ---
     var startXml = `
     <xml>
         <block type="agent_step_def" x="20" y="20">
@@ -166,9 +155,10 @@
         </block>
     </xml>`;
     
+    // Using domToWorkspace directly (ignoring deprecation for now as it still works)
     Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(startXml), workspace);
 
-    // --- 2. CHAT & FUNCTIONALITY (Unchanged) ---
+    // --- CHAT & APP LOGIC ---
     function toggleChat() {
         var body = document.getElementById('chat-body');
         var input = document.getElementById('chat-input-area');
@@ -182,7 +172,8 @@
         div.className = 'msg ' + sender;
         div.innerText = text;
         document.getElementById('chat-body').appendChild(div);
-        document.getElementById('chat-body').scrollTop = document.getElementById('chat-body').scrollHeight;
+        var chatBody = document.getElementById('chat-body');
+        chatBody.scrollTop = chatBody.scrollHeight;
     }
 
     function sendMessage() {
@@ -205,71 +196,136 @@
             }
             
             var text = data.response;
-            var jsonMatch = text.match(/\{[\s\S]*\}/);
-            
-            if (jsonMatch) {
-                try {
-                    var payload = JSON.parse(jsonMatch[0]);
+            var cleanText = text.replace(/```json\n?|```/g, "").trim();
+
+            try {
+                var payload = JSON.parse(cleanText);
+                if (Array.isArray(payload)) payload = payload[0];
+                if (typeof payload.block_json === 'string') payload.block_json = JSON.parse(payload.block_json);
+                
+                // AUTO-FIX: Force Statement Block
+                if (payload.block_json.output !== undefined) {
+                    delete payload.block_json.output;
+                    payload.block_json.previousStatement = null;
+                    payload.block_json.nextStatement = null;
+                }
+
+                if (payload.block_json && payload.python_code) {
                     addMessage("I generated a new policy block for you.", 'bot');
                     
                     var btn = document.createElement('button');
                     btn.className = 'install-btn';
-                    btn.innerText = "Install Block: " + (payload.block_json.type || "New Policy");
-                    btn.onclick = function() { installPolicy(payload); btn.disabled = true; btn.innerText = "Installed"; };
+                    var blockType = payload.block_json.type || "custom_policy";
+                    btn.innerText = "Install Block: " + blockType;
+                    
+                    btn.onclick = function() { 
+                        installPolicy(payload); 
+                        btn.disabled = true; 
+                        btn.innerText = "Installed (Look in Custom)"; 
+                    };
                     document.getElementById('chat-body').appendChild(btn);
-                } catch(e) {
-                    addMessage(text, 'bot');
+                } else {
+                    addMessage("I could not generate a valid block configuration.", 'bot');
                 }
-            } else {
-                addMessage(text, 'bot');
+            } catch(e) {
+                console.error("Parsing Error:", e);
+                addMessage("Error parsing AI response.", 'bot');
             }
         })
-        .catch(e => addMessage("Connection Error", 'bot'));
+        .catch(e => {
+            console.error(e);
+            addMessage("Connection Error", 'bot');
+        });
     }
 
     function installPolicy(payload) {
+        if (payload.block_json.output !== undefined) {
+             delete payload.block_json.output;
+             payload.block_json.previousStatement = null;
+             payload.block_json.nextStatement = null;
+        }
+
+        if (payload.block_json.previousStatement === null) {
+            payload.block_generator = payload.block_generator.replace(
+                /return\s*\[\s*([\s\S]*?)\s*,[\s\S]*?\];?/g, 
+                "return $1 + '\\n';"
+            );
+        }
+
+        if (payload.block_generator.includes("Blockly.Python['")) {
+            payload.block_generator = payload.block_generator.replace(
+                /Blockly\.Python\['/g, 
+                "Blockly.Python.forBlock['"
+            );
+        }
+
         Blockly.defineBlocksWithJsonArray([payload.block_json]);
         try {
+            // Now eval the corrected code
             eval(payload.block_generator);
-            fetch('/api/add_custom_policy', {
+            
+            var p1 = fetch('/api/add_custom_policy', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ code: payload.python_code })
-            }).then(() => {
+            });
+
+            var p2 = fetch('/api/save_block_definition', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ 
+                    block_json: payload.block_json,
+                    block_generator: payload.block_generator // Saves the CORRECTED code
+                })
+            });
+
+            Promise.all([p1, p2]).then(() => {
                 var toolbox = document.getElementById('toolbox');
                 var customCat = document.getElementById('customCategory');
-                var newBlock = document.createElement('block');
-                newBlock.setAttribute('type', payload.block_json.type);
-                customCat.appendChild(newBlock);
-                workspace.updateToolbox(toolbox);
-                alert("Block Installed! Look in the 'Custom' category.");
-            });
+                
+                if (!document.querySelector(`block[type="${payload.block_json.type}"]`)) {
+                    var newBlock = document.createElement('block');
+                    newBlock.setAttribute('type', payload.block_json.type);
+                    customCat.appendChild(newBlock);
+                    workspace.updateToolbox(toolbox);
+                }
+                alert("Block Installed Successfully!\n\nCheck the 'Custom' category.");
+            }).catch(e => alert("Error saving block to server: " + e));
+
         } catch(e) {
             console.error(e);
-            alert("Failed to install block definition.");
+            alert("Failed to install block definition: " + e);
         }
     }
 
     function generateAndSave() {
-        var code = Blockly.Python.workspaceToCode(workspace);
-        document.getElementById('saveStatus').innerText = "Sending...";
-        fetch('/api/update_code', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ code: code })
-        })
-        .then(res => res.json())
-        .then(data => {
-            document.getElementById('saveStatus').innerText = "Saved!";
-            setTimeout(() => document.getElementById('saveStatus').innerText = "", 2000);
-        });
+        try {
+            var code = Blockly.Python.workspaceToCode(workspace);
+            document.getElementById('saveStatus').innerText = "Sending...";
+            fetch('/api/update_code', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ code: code })
+            })
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('saveStatus').innerText = "Saved!";
+                setTimeout(() => document.getElementById('saveStatus').innerText = "", 2000);
+            });
+        } catch (e) {
+            console.error("Generator Error:", e);
+            alert("Error generating code. Check console for details.\n" + e.message);
+        }
     }
 
     function resetLogic() {
         if(!confirm("Reset logic?")) return;
         fetch('/api/reset_code', { method: 'POST' })
         .then(res => res.json())
-        .then(data => alert("Reset Complete"));
+        .then(data => {
+            alert("Reset Complete");
+            location.reload(); 
+        });
     }
   </script>
 </body>

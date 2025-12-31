@@ -4,8 +4,10 @@ mesa[rec]
 scipy
 numpy
 gunicorn
-chromadb
-llama-index
-llama-index-llms-ollama
-llama-index-embeddings-ollama
-llama-index-vector-stores-chroma
+# chromadb
+# llama-index
+# llama-index-llms-ollama
+# llama-index-embeddings-ollama
+# llama-index-vector-stores-chroma
+google-genai
+python-dotenv

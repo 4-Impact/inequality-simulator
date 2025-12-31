@@ -9,13 +9,21 @@ import time
 import logging
 import os
 import sys
+import re
 
+"""
 # --- LLM / RAG Imports ---
 import chromadb
 from llama_index.core import VectorStoreIndex, Settings
 from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.embeddings.ollama import OllamaEmbedding
 from llama_index.llms.ollama import Ollama
+"""
+from dotenv import load_dotenv
+load_dotenv()
+
+import google.genai as genai
+from google.genai import types
 
 # --- Model Imports ---
 from model import WealthModel, compute_gini, total_wealth
@@ -30,11 +38,13 @@ CORS(app, origins=['*'])
 # --- Global State ---
 current_model = None
 model_lock = threading.Lock()
-query_engine = None
+#query_engine = None
+gemini_client = None
 
 # --- Constants ---
 CUSTOM_POLICIES_FILE = 'custom_policies.py'
 USER_LOGIC_FILE = 'user_logic.py'
+USER_BLOCKS_FILE = 'blockly/user_blocks.js'
 
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -46,9 +56,10 @@ class NumpyEncoder(json.JSONEncoder):
 def json_response(data):
     return Response(json.dumps(data, cls=NumpyEncoder), mimetype='application/json')
 
+"""
 # --- RAG Initialization ---
 def init_rag():
-    """Initializes the RAG engine using ChromaDB and Ollama"""
+    Initializes the RAG engine using ChromaDB and Ollama
     global query_engine
     try:
         print("Initializing RAG Engine...")
@@ -73,33 +84,52 @@ def init_rag():
             "### STRICT SECURITY RULES ###\n"
             "1. GENERATE ONLY PYTHON CODE. No bash, shell, or other languages.\n"
             "2. DO NOT use these modules: os, sys, subprocess, shutil, requests, urllib, eval, exec.\n"
-            "3. Code must be a single class containing an `execute(self, agent)` method.\n"
+            "3. Code must be a single class containing an `execute(self, agent)` method.\n\n"
 
-            "The user will ask for a policy (e.g., 'Universal Basic Income').\n"
+            "### RESPONSE FORMAT ###\n"
             "You must return the response in strict JSON format. "
-            "Do not write any conversational text before or after the JSON.\n\n"
-            
-            "### REQUIREMENTS ###\n"
-            "1. `python_code`: A Python class with an `execute(self, agent)` method.\n"
-            "2. `block_json`: A Blockly JSON definition.\n"
-            "3. `block_generator`: A JavaScript string defining the Blockly generator.\n\n"
+            "Do not write any conversational text before or after the JSON.\n"
+            "Example format:\n"
+            "{\n"
+            '  "python_code": "class UniversalBasicIncome:\\n    def execute(self, agent):\\n        agent.wealth += 10",\n'
+            '  "block_json": { "type": "universal_basic_income", "message0": "Universal Basic Income", "previousStatement": null, "nextStatement": null, "colour": 0, "tooltip": "Give everyone money" },\n'
+            '  "block_generator": "Blockly.Python[\'universal_basic_income\'] = function(block) { return \'UniversalBasicIncome().execute(self)\\n\'; };"\n'
+            "}\n\n"
             
             "### EXTREMELY IMPORTANT ###\n"
             "Your entire output must be a single valid JSON object. "
             "Do not wrap it in markdown blocks (like ```json). "
             "Start your response with '{' and end with '}'."
-
-            "Let the user know the block is complete in the chat"
         )
+    
         
         query_engine = index.as_query_engine(similarity_top_k=5, system_prompt=system_prompt)
         print("RAG Engine Loaded Successfully.")
     except Exception as e:
         print(f"Warning: Failed to load RAG Engine. Chat features will not work. Error: {e}")
+"""
+
+# --- Gemini Initialization ---
+def init_gemini():
+    """Initializes Google Gen AI Client"""
+    global gemini_client
+    api_key = os.environ.get("GOOGLE_API_KEY")
+    
+    if not api_key:
+        print("WARNING: GOOGLE_API_KEY not found. Chat will not work.")
+        return
+
+    try:
+        print("Initializing Google Gen AI Client...")
+        # NEW SYNTAX: Create a client instead of global configure
+        gemini_client = genai.Client(api_key=api_key)
+        print("Gemini Client Loaded Successfully.")
+    except Exception as e:
+        print(f"Warning: Failed to load Gemini Client. Error: {e}")
 
 # --- Helper to Reset Logic ---
 def reset_logic_internal():
-    """Resets user_logic.py and custom_policies.py to default"""
+    """Resets user_logic.py, custom_policies.py, and user_blocks.js to default"""
     try:
         default_content = "HAS_CUSTOM_LOGIC = False\n\ndef step(self):\n    pass\n"
         with open(USER_LOGIC_FILE, 'w') as f:
@@ -107,31 +137,37 @@ def reset_logic_internal():
         
         with open(CUSTOM_POLICIES_FILE, 'w') as f:
             f.write("# Custom user-generated policies will be appended here\n\n")
+
+        # --- NEW: Reset user blocks file ---
+        with open(USER_BLOCKS_FILE, 'w') as f:
+            f.write("// User generated blocks will be saved here\n\n")
             
-        logger.info("Logic and Custom Policies reset to default.")
+        logger.info("Logic, Custom Policies, and User Blocks reset to default.")
         return True
     except Exception as e:
         logger.error(f"Failed to reset logic: {e}")
         return False
 
-# --- NEW: Simulation Setup Function ---
+# --- Simulation Setup Function ---
 def setup_simulation():
     """Forces a clean state for the simulation on startup"""
     global current_model
     
     print("--- PERFORMING SYSTEM RESET ---")
-    # 1. Force Reset of User Logic
     reset_logic_internal()
     
-    # 2. Ensure Files Exist
+    # Ensure Files Exist
     if not os.path.exists(CUSTOM_POLICIES_FILE):
-        with open(CUSTOM_POLICIES_FILE, 'w') as f:
-            f.write("# Custom user-generated policies will be appended here\n\n")
+        with open(CUSTOM_POLICIES_FILE, 'w') as f: f.write("# Init\n")
+    if not os.path.exists(USER_BLOCKS_FILE):
+        with open(USER_BLOCKS_FILE, 'w') as f: f.write("// Init\n")
 
-    # 3. Initialize Default Model
     with model_lock:
         current_model = WealthModel()
-        print("Default WealthModel initialized (Original Version).")
+        print("Default WealthModel initialized.")
+    
+    # Initialize Gemini
+    init_gemini()
 
 # --- Standard Routes ---
 @app.route('/')
@@ -326,16 +362,111 @@ def update_code():
         return jsonify({'status': 'success', 'message': 'Logic updated!'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    
+@app.route('/api/save_block_definition', methods=['POST'])
+def save_block_definition():
+    try:
+        data = request.get_json()
+        block_json = data.get('block_json')
+        block_generator = data.get('block_generator')
+        
+        if not block_json or not block_generator:
+            return jsonify({'error': 'Missing block definition'}), 400
+            
+        # Append the new block definition to the JS file
+        with open(USER_BLOCKS_FILE, 'a') as f:
+            f.write(f"\n// --- New Block: {block_json.get('type', 'unknown')} ---\n")
+            # Write the block definition
+            f.write(f"Blockly.defineBlocksWithJsonArray([{json.dumps(block_json)}]);\n")
+            # Write the generator function
+            f.write(f"{block_generator}\n")
+            
+        return jsonify({'status': 'success', 'message': 'Block definition saved.'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
+def sanitize_ai_response(json_text):
+    """
+    Scans the AI's JSON output for common Mesa 3.0 and Scope errors
+    and fixes them automatically before sending to the frontend.
+    """
+    try:
+        # 1. Clean Markdown wrappers if present
+        clean_text = re.sub(r'^```json\s*|```\s*$', '', json_text.strip(), flags=re.MULTILINE)
+        data = json.loads(clean_text)
+
+        # --- FIX 1: Mesa 3.0 Compatibility (model.schedule.agents -> model.agents) ---
+        if 'python_code' in data:
+            if 'model.schedule.agents' in data['python_code']:
+                print("LOG: Auto-fixing Mesa 3.0 'schedule.agents' error.")
+                data['python_code'] = data['python_code'].replace('model.schedule.agents', 'model.agents')
+
+        # --- FIX 2: Scope Error (model -> self.model) in Block Generator ---
+        # The AI often writes ".execute(self, model)" but 'model' is undefined in user_logic.py
+        if 'block_generator' in data:
+            gen_code = data['block_generator']
+            
+            # Regex to find .execute(self, model) and turn it into .execute(self, self.model)
+            # This looks for the pattern: .execute(self, model)
+            if re.search(r'\.execute\(\s*self\s*,\s*model\s*\)', gen_code):
+                print("LOG: Auto-fixing Scope error 'model' -> 'self.model'")
+                data['block_generator'] = re.sub(
+                    r'\.execute\(\s*self\s*,\s*model\s*\)', 
+                    '.execute(self, self.model)', 
+                    gen_code
+                )
+
+        return json.dumps(data)
+
+    except Exception as e:
+        print(f"Sanitization Warning: Could not parse/fix JSON: {e}")
+        return json_text
+    
 @app.route('/api/chat', methods=['POST'])
 def chat_endpoint():
-    global query_engine
-    if query_engine is None: return jsonify({'error': 'RAG Engine not initialized'}), 503
+    global gemini_client
+    if gemini_client is None: return jsonify({'error': 'Gemini not initialized'}), 503
     try:
         data = request.get_json()
         user_query = data.get('message', '')
-        response = query_engine.query(user_query)
-        return jsonify({'response': str(response)})
+        
+        # UPDATED PROMPT: Specific Rules for Mesa 3 & Scope
+        prompt = (
+            "You are a Policy Generator for a Mesa Agent simulation (Mesa 3.0+). "
+            "Convert the user's idea into a Python class and a Blockly block definition.\n\n"
+            
+            "### CODING RULES (CRITICAL) ###\n"
+            "1. **MESA 3.0 COMPATIBILITY**: `model.schedule.agents` DOES NOT EXIST. Use `model.agents` (it is a list).\n"
+            "2. **SCOPE SAFETY**: This code runs inside `Agent.step(self)`. The variable `model` is NOT global. You MUST use `self.model`.\n"
+            "3. **GENERATOR**: In the block generator, pass `self.model` to your class, not `model`. Ex: `MyPol().execute(self, self.model)`.\n\n"
+            "4. **MODEL AND AGENT ATTRIBUTES**: Check ALL attributes added to the created policy blocks to MAKE SURE THEY EXIST, for example"
+            "if the user says survival threshold the model attribute that agent would reference  would be self.model.survival_cost."
+
+            "### BLOCK DEFINITION RULES ###\n"
+            "1. Block must be an ACTION (Statement).\n"
+            "2. JSON: `\"previousStatement\": null, \"nextStatement\": null`.\n"
+            "3. GENERATOR SYNTAX: Use `Blockly.Python.forBlock['name'] = ...`.\n\n"
+            
+            "### OUTPUT FORMAT (Strict JSON) ###\n"
+            "{\n"
+            '  "python_code": "class MyPolicy:\\n    def execute(self, agent, model):\\n        # Use model.agents, NOT schedule.agents\\n        pass",\n'
+            '  "block_json": { "type": "my_policy", "message0": "Execute My Policy", "previousStatement": null, "nextStatement": null, "colour": 0 },\n'
+            '  "block_generator": "Blockly.Python.forBlock[\'my_policy\'] = function(block) { return \'MyPolicy().execute(self, self.model)\\n\'; };"\n'
+            "}\n\n"
+            f"User Idea: {user_query}"
+        )
+        
+        response = gemini_client.models.generate_content(
+            model='gemini-2.0-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(response_mime_type='application/json')
+        )
+        
+        # Run the Auto-Fixer before sending back to user
+        final_json = sanitize_ai_response(response.text)
+        
+        return jsonify({'response': final_json})
+
     except Exception as e:
-        logger.error(f"Chat error: {e}")
+        print(e)
         return jsonify({'error': str(e)}), 500
