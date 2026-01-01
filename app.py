@@ -416,7 +416,12 @@ def sanitize_ai_response(json_text):
 @app.route('/api/chat', methods=['POST'])
 def chat_endpoint():
     global gemini_client
-    if gemini_client is None: return jsonify({'error': 'Gemini not initialized'}), 503
+    if gemini_client is None: 
+        try: 
+            logging.info("Initializing Gemini")
+            init_gemini()
+        except: 
+            return jsonify({'error': 'Gemini not initialized'}), 503
     
     data = request.get_json()
     user_query = data.get('message', '')
