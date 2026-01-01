@@ -1,5 +1,3 @@
-# tpike3/inequality-simulator/inequality-simulator-main/app.py
-
 from flask import Flask, jsonify, request, send_from_directory, Response
 from flask_cors import CORS
 import json
@@ -10,15 +8,8 @@ import logging
 import os
 import sys
 import re
+import traceback
 
-"""
-# --- LLM / RAG Imports ---
-import chromadb
-from llama_index.core import VectorStoreIndex, Settings
-from llama_index.vector_stores.chroma import ChromaVectorStore
-from llama_index.embeddings.ollama import OllamaEmbedding
-from llama_index.llms.ollama import Ollama
-"""
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -38,7 +29,6 @@ CORS(app, origins=['*'])
 # --- Global State ---
 current_model = None
 model_lock = threading.Lock()
-#query_engine = None
 gemini_client = None
 
 # --- Constants ---
@@ -56,59 +46,6 @@ class NumpyEncoder(json.JSONEncoder):
 def json_response(data):
     return Response(json.dumps(data, cls=NumpyEncoder), mimetype='application/json')
 
-"""
-# --- RAG Initialization ---
-def init_rag():
-    Initializes the RAG engine using ChromaDB and Ollama
-    global query_engine
-    try:
-        print("Initializing RAG Engine...")
-        model_name = "nomic-embed-text:v1.5"
-        Settings.embed_model = OllamaEmbedding(model_name=model_name)
-        Settings.llm = Ollama(model="dolphin-llama3:8b", request_timeout=120.0)
-
-        # Check in SLM folder or root
-        db_path = "./SLM/chroma_db" if os.path.exists("./SLM/chroma_db") else "./chroma_db"
-        print(f"Connecting to ChromaDB at {db_path}...")
-
-        db = chromadb.PersistentClient(path=db_path)
-        chroma_collection = db.get_or_create_collection("mesa_repo")
-        vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
-        
-        index = VectorStoreIndex.from_vector_store(vector_store=vector_store)
-        
-        # Robust System Prompt for Security & JSON
-        system_prompt = (
-            "You are a secure Policy Generation Assistant for a Mesa-based Agent simulation. "
-            "Your goal is to interpret user policy ideas and convert them into executable Python code and Blockly definitions.\n\n"
-            "### STRICT SECURITY RULES ###\n"
-            "1. GENERATE ONLY PYTHON CODE. No bash, shell, or other languages.\n"
-            "2. DO NOT use these modules: os, sys, subprocess, shutil, requests, urllib, eval, exec.\n"
-            "3. Code must be a single class containing an `execute(self, agent)` method.\n\n"
-
-            "### RESPONSE FORMAT ###\n"
-            "You must return the response in strict JSON format. "
-            "Do not write any conversational text before or after the JSON.\n"
-            "Example format:\n"
-            "{\n"
-            '  "python_code": "class UniversalBasicIncome:\\n    def execute(self, agent):\\n        agent.wealth += 10",\n'
-            '  "block_json": { "type": "universal_basic_income", "message0": "Universal Basic Income", "previousStatement": null, "nextStatement": null, "colour": 0, "tooltip": "Give everyone money" },\n'
-            '  "block_generator": "Blockly.Python[\'universal_basic_income\'] = function(block) { return \'UniversalBasicIncome().execute(self)\\n\'; };"\n'
-            "}\n\n"
-            
-            "### EXTREMELY IMPORTANT ###\n"
-            "Your entire output must be a single valid JSON object. "
-            "Do not wrap it in markdown blocks (like ```json). "
-            "Start your response with '{' and end with '}'."
-        )
-    
-        
-        query_engine = index.as_query_engine(similarity_top_k=5, system_prompt=system_prompt)
-        print("RAG Engine Loaded Successfully.")
-    except Exception as e:
-        print(f"Warning: Failed to load RAG Engine. Chat features will not work. Error: {e}")
-"""
-
 # --- Gemini Initialization ---
 def init_gemini():
     """Initializes Google Gen AI Client"""
@@ -121,7 +58,6 @@ def init_gemini():
 
     try:
         print("Initializing Google Gen AI Client...")
-        # NEW SYNTAX: Create a client instead of global configure
         gemini_client = genai.Client(api_key=api_key)
         print("Gemini Client Loaded Successfully.")
     except Exception as e:
@@ -138,7 +74,6 @@ def reset_logic_internal():
         with open(CUSTOM_POLICIES_FILE, 'w') as f:
             f.write("# Custom user-generated policies will be appended here\n\n")
 
-        # --- NEW: Reset user blocks file ---
         with open(USER_BLOCKS_FILE, 'w') as f:
             f.write("// User generated blocks will be saved here\n\n")
             
@@ -156,7 +91,6 @@ def setup_simulation():
     print("--- PERFORMING SYSTEM RESET ---")
     reset_logic_internal()
     
-    # Ensure Files Exist
     if not os.path.exists(CUSTOM_POLICIES_FILE):
         with open(CUSTOM_POLICIES_FILE, 'w') as f: f.write("# Init\n")
     if not os.path.exists(USER_BLOCKS_FILE):
@@ -166,7 +100,6 @@ def setup_simulation():
         current_model = WealthModel()
         print("Default WealthModel initialized.")
     
-    # Initialize Gemini
     init_gemini()
 
 # --- Standard Routes ---
@@ -200,7 +133,6 @@ def explain_js(filename): return send_from_directory('explanatory/static/js', fi
 def explain_assets(filename): return send_from_directory('explanatory/static/assets', filename)
 
 # --- API Endpoints ---
-
 @app.route('/api/system_reset', methods=['POST'])
 def system_reset():
     reset_logic_internal()
@@ -237,22 +169,17 @@ def step_model():
         current_model.datacollector.collect(current_model)
     return jsonify({'status': 'success'})
 
-#----------------------------- START  DATA COLLECTION -------------------------------------#
-
 @app.route('/api/data/wealth-distribution', methods=['GET'])
 def get_wealth_distribution():
     global current_model
     if current_model is None: return jsonify({'error': 'Model not initialized'}), 400
     with model_lock:
-        # Check for Comparison Mode
         if current_model.policy == "comparison":
-            # Return the wealth lists from the results dictionary
             return json_response({
                 policy: data['final_wealth'] 
                 for policy, data in current_model.comparison_results.items()
             })
         else:
-            # Single Model Mode
             wealth_vals = [agent.wealth for agent in current_model.agents]
             return json_response({'current': wealth_vals})
 
@@ -262,7 +189,6 @@ def get_mobility_data():
     if current_model is None: return jsonify({'error': 'Model not initialized'}), 400
     with model_lock:
         if current_model.policy == "comparison":
-            # Aggregate agent data from all sub-models
             comparison_data = {}
             for policy, sub_model in current_model.comparison_models.items():
                 agents_data = []
@@ -276,7 +202,6 @@ def get_mobility_data():
                 comparison_data[policy] = agents_data
             return json_response(comparison_data)
         else:
-            # Single Model Mode
             agents_data = []
             for agent in current_model.agents:
                 agents_data.append({
@@ -293,7 +218,6 @@ def get_gini_data():
     if current_model is None: return jsonify({'error': 'Model not initialized'}), 400
     with model_lock:
         if current_model.policy == "comparison":
-            # Return the historical lists for each policy
             return json_response({
                 policy: data['gini'] 
                 for policy, data in current_model.comparison_results.items()
@@ -309,7 +233,6 @@ def get_total_wealth_data():
     if current_model is None: return jsonify({'error': 'Model not initialized'}), 400
     with model_lock:
         if current_model.policy == "comparison":
-            # Return the historical lists for each policy
             return json_response({
                 policy: data['total'] 
                 for policy, data in current_model.comparison_results.items()
@@ -318,8 +241,6 @@ def get_total_wealth_data():
             model_data = current_model.datacollector.get_model_vars_dataframe()
             total_data = model_data['Total'].tolist() if 'Total' in model_data.columns else []
             return json_response({'current': total_data})
-
-#----------------------------- END DATA COLLECTION -------------------------------------#
 
 @app.route('/api/status', methods=['GET'])
 def get_status():
@@ -373,100 +294,196 @@ def save_block_definition():
         if not block_json or not block_generator:
             return jsonify({'error': 'Missing block definition'}), 400
             
-        # Append the new block definition to the JS file
         with open(USER_BLOCKS_FILE, 'a') as f:
             f.write(f"\n// --- New Block: {block_json.get('type', 'unknown')} ---\n")
-            # Write the block definition
             f.write(f"Blockly.defineBlocksWithJsonArray([{json.dumps(block_json)}]);\n")
-            # Write the generator function
             f.write(f"{block_generator}\n")
             
         return jsonify({'status': 'success', 'message': 'Block definition saved.'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-def sanitize_ai_response(json_text):
+# --- VALIDATION LOGIC ---
+class MockModel:
+    def __init__(self):
+        # Match attributes from WealthModel in model.py
+        self.agents = []
+        self.survival_cost = 1.0
+        self.policy = "custom"
+        self.population = 10
+        self.brackets = [10, 20]
+        self.start_up_required = 1
+        self.patron = False
+        self.total = 1000.0
+        self.comparison_results = {}
+        # Mock DataCollector
+        self.datacollector = type('MockDataCollector', (), {'collect': lambda s, m: None})()
+
+class MockAgent:
+    def __init__(self, model):
+        # Match attributes from WealthAgent
+        self.wealth = 10.0
+        self.W = 0.2
+        self.I = 1.0 # Innovation
+        self.model = model
+        self.unique_id = 1
+        self.bracket = "Middle"
+        self.bracket_history = []
+        self.party_elite = False
+        self.mobility = 0
+
+def validate_policy_code(code_str):
     """
-    Scans the AI's JSON output for common Mesa 3.0 and Scope errors
-    and fixes them automatically before sending to the frontend.
+    Tries to compile and execute the generated code in a mock environment.
+    Returns (success: bool, message: str)
     """
     try:
-        # 1. Clean Markdown wrappers if present
+        # 1. Syntax Check
+        compile(code_str, '<string>', 'exec')
+        
+        # 2. Runtime Check (Safe Execution)
+        local_scope = {}
+        exec(code_str, {'np': np, 'random': np.random}, local_scope)
+        
+        # Find the class definition
+        policy_class = None
+        for name, val in local_scope.items():
+            if isinstance(val, type):
+                policy_class = val
+                break
+        
+        if not policy_class:
+            return False, "Code executed but no class definition was found."
+
+        # 3. Execution Check
+        mock_model = MockModel()
+        mock_agent = MockAgent(mock_model)
+        mock_model.agents.append(mock_agent)
+        
+        instance = policy_class()
+        
+        # Try running it
+        if not hasattr(instance, 'execute'):
+            return False, f"Class '{policy_class.__name__}' missing 'execute' method."
+            
+        try:
+            instance.execute(mock_agent, mock_model)
+        except TypeError:
+            instance.execute(mock_agent)
+            
+        return True, "Verified: Code compiled and ran successfully in test environment."
+        
+    except Exception as e:
+        tb = traceback.format_exc()
+        
+        # --- IMPROVED ERROR REPORTING FOR AI ---
+        # If it's an attribute error, list what IS available so the AI can fix it.
+        error_msg = f"{type(e).__name__}: {str(e)}"
+        
+        if isinstance(e, AttributeError):
+            # Create fresh mocks to inspect attributes
+            m_attrs = [k for k in MockModel().__dict__.keys() if not k.startswith('_')]
+            a_attrs = [k for k in MockAgent(MockModel()).__dict__.keys() if not k.startswith('_')]
+            
+            error_msg += f"\n[HINT] Available Model attributes: {m_attrs}"
+            error_msg += f"\n[HINT] Available Agent attributes: {a_attrs}"
+            error_msg += "\nPlease check your variable names."
+
+        return False, error_msg
+
+def sanitize_ai_response(json_text):
+    try:
         clean_text = re.sub(r'^```json\s*|```\s*$', '', json_text.strip(), flags=re.MULTILINE)
         data = json.loads(clean_text)
-
-        # --- FIX 1: Mesa 3.0 Compatibility (model.schedule.agents -> model.agents) ---
+        
         if 'python_code' in data:
             if 'model.schedule.agents' in data['python_code']:
-                print("LOG: Auto-fixing Mesa 3.0 'schedule.agents' error.")
                 data['python_code'] = data['python_code'].replace('model.schedule.agents', 'model.agents')
 
-        # --- FIX 2: Scope Error (model -> self.model) in Block Generator ---
-        # The AI often writes ".execute(self, model)" but 'model' is undefined in user_logic.py
         if 'block_generator' in data:
             gen_code = data['block_generator']
-            
-            # Regex to find .execute(self, model) and turn it into .execute(self, self.model)
-            # This looks for the pattern: .execute(self, model)
             if re.search(r'\.execute\(\s*self\s*,\s*model\s*\)', gen_code):
-                print("LOG: Auto-fixing Scope error 'model' -> 'self.model'")
                 data['block_generator'] = re.sub(
                     r'\.execute\(\s*self\s*,\s*model\s*\)', 
                     '.execute(self, self.model)', 
                     gen_code
                 )
-
-        return json.dumps(data)
-
+        return data
     except Exception as e:
-        print(f"Sanitization Warning: Could not parse/fix JSON: {e}")
-        return json_text
-    
+        print(f"Sanitization Warning: {e}")
+        return None
+
 @app.route('/api/chat', methods=['POST'])
 def chat_endpoint():
     global gemini_client
     if gemini_client is None: return jsonify({'error': 'Gemini not initialized'}), 503
-    try:
-        data = request.get_json()
-        user_query = data.get('message', '')
+    
+    data = request.get_json()
+    user_query = data.get('message', '')
+    
+    # SYSTEM PROMPT
+    base_prompt = (
+        "You are a Policy Generator for a Mesa Agent simulation (Mesa 3.0+). "
+        "Convert the user's idea into a Python class and a Blockly block definition.\n\n"
         
-        # UPDATED PROMPT: Specific Rules for Mesa 3 & Scope
-        prompt = (
-            "You are a Policy Generator for a Mesa Agent simulation (Mesa 3.0+). "
-            "Convert the user's idea into a Python class and a Blockly block definition.\n\n"
-            
-            "### CODING RULES (CRITICAL) ###\n"
-            "1. **MESA 3.0 COMPATIBILITY**: `model.schedule.agents` DOES NOT EXIST. Use `model.agents` (it is a list).\n"
-            "2. **SCOPE SAFETY**: This code runs inside `Agent.step(self)`. The variable `model` is NOT global. You MUST use `self.model`.\n"
-            "3. **GENERATOR**: In the block generator, pass `self.model` to your class, not `model`. Ex: `MyPol().execute(self, self.model)`.\n\n"
-            "4. **MODEL AND AGENT ATTRIBUTES**: Check ALL attributes added to the created policy blocks to MAKE SURE THEY EXIST, for example"
-            "if the user says survival threshold the model attribute that agent would reference  would be self.model.survival_cost."
+        "### CODING RULES (CRITICAL) ###\n"
+        "1. **MESA 3.0 COMPATIBILITY**: `model.schedule.agents` DOES NOT EXIST. Use `model.agents` (it is a list).\n"
+        "2. **SCOPE SAFETY**: This code runs inside `Agent.step(self)`. The variable `model` is NOT global. You MUST use `self.model`.\n"
+        "3. **GENERATOR**: In the block generator, pass `self.model` to your class. Ex: `MyPol().execute(self, self.model)`.\n\n"
+        "4. **ATTRIBUTES**: Verify attributes exist. The model has `survival_cost` (NOT survival_amount or threshold).\n\n"
+        
+        "### OUTPUT FORMAT (Strict JSON) ###\n"
+        "{\n"
+        '  "python_code": "class MyPolicy:\\n    def execute(self, agent, model):\\n        # logic",\n'
+        '  "block_json": { "type": "my_policy", "message0": "Execute My Policy", "previousStatement": null, "nextStatement": null, "colour": 0 },\n'
+        '  "block_generator": "Blockly.Python.forBlock[\'my_policy\'] = function(block) { return \'MyPolicy().execute(self, self.model)\\n\'; };"\n'
+        "}\n"
+    )
 
-            "### BLOCK DEFINITION RULES ###\n"
-            "1. Block must be an ACTION (Statement).\n"
-            "2. JSON: `\"previousStatement\": null, \"nextStatement\": null`.\n"
-            "3. GENERATOR SYNTAX: Use `Blockly.Python.forBlock['name'] = ...`.\n\n"
+    current_prompt = base_prompt + f"\nUser Idea: {user_query}"
+    
+    max_retries = 3
+    status_log = []
+    final_response = None
+    
+    for attempt in range(max_retries):
+        status_log.append(f"Phase 1 (Attempt {attempt+1}): Generating Code...")
+        try:
+            response = gemini_client.models.generate_content(
+                model='gemini-2.0-flash',
+                contents=current_prompt,
+                config=types.GenerateContentConfig(response_mime_type='application/json')
+            )
             
-            "### OUTPUT FORMAT (Strict JSON) ###\n"
-            "{\n"
-            '  "python_code": "class MyPolicy:\\n    def execute(self, agent, model):\\n        # Use model.agents, NOT schedule.agents\\n        pass",\n'
-            '  "block_json": { "type": "my_policy", "message0": "Execute My Policy", "previousStatement": null, "nextStatement": null, "colour": 0 },\n'
-            '  "block_generator": "Blockly.Python.forBlock[\'my_policy\'] = function(block) { return \'MyPolicy().execute(self, self.model)\\n\'; };"\n'
-            "}\n\n"
-            f"User Idea: {user_query}"
-        )
+            # 1. Parse & Sanitize
+            json_data = sanitize_ai_response(response.text)
+            if not json_data:
+                raise ValueError("Failed to parse JSON response")
+            
+            # 2. Test Code
+            status_log.append(f"Phase 2 (Attempt {attempt+1}): Testing Code...")
+            valid, message = validate_policy_code(json_data['python_code'])
+            
+            if valid:
+                status_log.append("Phase 2: Success! Code verified.")
+                json_data['status_message'] = f"✅ Success! (Attempt {attempt+1})\n" + "\n".join(status_log)
+                final_response = json_data
+                break
+            else:
+                status_log.append(f"Phase 2 Failed: {message}")
+                # Feedback loop: Add error to prompt and retry
+                current_prompt += f"\n\nPREVIOUS ATTEMPT FAILED VALIDATION:\nCode:\n{json_data['python_code']}\nError:\n{message}\n\nPlease fix the code and return the JSON again."
         
-        response = gemini_client.models.generate_content(
-            model='gemini-2.0-flash',
-            contents=prompt,
-            config=types.GenerateContentConfig(response_mime_type='application/json')
-        )
-        
-        # Run the Auto-Fixer before sending back to user
-        final_json = sanitize_ai_response(response.text)
-        
-        return jsonify({'response': final_json})
+        except Exception as e:
+            status_log.append(f"Error in attempt {attempt+1}: {str(e)}")
+            time.sleep(1) 
 
-    except Exception as e:
-        print(e)
-        return jsonify({'error': str(e)}), 500
+    if final_response:
+        return jsonify({'response': json.dumps(final_response)})
+    else:
+        return jsonify({'error': "Failed to generate valid code after 3 attempts.\nLogs:\n" + "\n".join(status_log)}), 500
+
+if __name__ == "__main__":
+    setup_simulation()
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=False, host='0.0.0.0', port=port)
