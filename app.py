@@ -53,15 +53,15 @@ def init_gemini():
     api_key = os.environ.get("GOOGLE_API_KEY")
     
     if not api_key:
-        print("WARNING: GOOGLE_API_KEY not found. Chat will not work.")
+        logging.warning("GOOGLE_API_KEY not found. Chat will not work.")
         return
 
     try:
-        print("Initializing Google Gen AI Client...")
+        logging.info("Initializing Google Gen AI Client...")
         gemini_client = genai.Client(api_key=api_key)
-        print("Gemini Client Loaded Successfully.")
+        logging.info("Gemini Client Loaded Successfully.")
     except Exception as e:
-        print(f"Warning: Failed to load Gemini Client. Error: {e}")
+        logging.exception(f"Warning: Failed to load Gemini Client. Error: {e}")
 
 # --- Helper to Reset Logic ---
 def reset_logic_internal():
