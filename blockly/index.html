@@ -180,7 +180,7 @@
         addMessage(msg, 'user');
         input.value = '';
 
-        // Add loading message
+        // loading message
         var loadingMsg = addMessage("Generating and testing code... please wait...", 'bot loading');
 
         fetch('/api/chat', {
@@ -204,6 +204,12 @@
             try {
                 var payload = JSON.parse(cleanText);
                 if (Array.isArray(payload)) payload = payload[0];
+
+                // 1. Display the Gemini Step-by-Step Description
+                if (payload.description) {
+                    addMessage("<b>Policy Description:</b><br>" + payload.description, 'bot', true);
+                }
+
                 if (typeof payload.block_json === 'string') payload.block_json = JSON.parse(payload.block_json);
                 
                 // Fix Statement
@@ -214,11 +220,11 @@
                 }
 
                 if (payload.block_json && payload.python_code) {
-                    // DISPLAY STATUS MESSAGE from backend
-                    var status = payload.status_message || "Code Generated Successfully.";
-                    var statusDiv = "<div class='status-log'>" + status + "</div>";
+                    // 2. FIXED: Consolidate the status log and the install prompt
+                    var statusText = payload.status_message || "✅ Code verified and ready to install.";
+                    var combinedHtml = "<div class='status-log'>" + statusText + "</div><br><b>Ready to Install?</b>";
                     
-                    addMessage(statusDiv + "<br><b>Ready to Install?</b>", 'bot', true);
+                    addMessage(combinedHtml, 'bot', true);
                     
                     var btn = document.createElement('button');
                     btn.className = 'install-btn';
@@ -240,7 +246,7 @@
                 }
             } catch(e) {
                 console.error("Parsing Error:", e);
-                addMessage("Error parsing AI response.", 'bot');
+                addMessage("Error parsing AI response: " + e.message, 'bot');
             }
         })
         .catch(e => {

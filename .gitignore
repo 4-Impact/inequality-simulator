@@ -9,7 +9,7 @@ node_modules/
 */.ipynb_checkpoints
 *.tsbuildinfo
 .env
-
+.vscode/*
 
 # Integration tests
 ui-tests/test-results/

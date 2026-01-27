@@ -482,7 +482,7 @@ def chat_endpoint():
         except Exception as e:
             status_log.append(f"Error in attempt {attempt+1}: {str(e)}")
             time.sleep(1) 
-
+    
     if final_response:
         return jsonify({'response': json.dumps(final_response)})
     else:
