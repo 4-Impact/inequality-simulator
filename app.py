@@ -53,15 +53,15 @@ def init_gemini():
     api_key = os.environ.get("GOOGLE_API_KEY")
     
     if not api_key:
-        print("WARNING: GOOGLE_API_KEY not found. Chat will not work.")
+        logging.warning("GOOGLE_API_KEY not found. Chat will not work.")
         return
 
     try:
-        print("Initializing Google Gen AI Client...")
+        logging.info("Initializing Google Gen AI Client...")
         gemini_client = genai.Client(api_key=api_key)
-        print("Gemini Client Loaded Successfully.")
+        logging.info("Gemini Client Loaded Successfully.")
     except Exception as e:
-        print(f"Warning: Failed to load Gemini Client. Error: {e}")
+        logging.exception(f"Warning: Failed to load Gemini Client. Error: {e}")
 
 # --- Helper to Reset Logic ---
 def reset_logic_internal():
@@ -416,7 +416,12 @@ def sanitize_ai_response(json_text):
 @app.route('/api/chat', methods=['POST'])
 def chat_endpoint():
     global gemini_client
-    if gemini_client is None: return jsonify({'error': 'Gemini not initialized'}), 503
+    if gemini_client is None: 
+        try: 
+            logging.info("Initializing Gemini")
+            init_gemini()
+        except: 
+            return jsonify({'error': 'Gemini not initialized'}), 503
     
     data = request.get_json()
     user_query = data.get('message', '')
