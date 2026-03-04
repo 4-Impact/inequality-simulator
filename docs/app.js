@@ -66,15 +66,15 @@ class InequalitySimulator {
         this.agentPositions = {}; // Store fixed x positions for agents
         this.previousClassCounts = null; // Store previous class distribution for flow calculation
     this.currentView = 'population';
-    this.youIndex = null; // random agent index for person view
+    this.youIndex = null; // which agent index represents "you"
     const urlParams = new URLSearchParams(window.location.search);
     this.youSeed = urlParams.get('seed') || localStorage.getItem('sim_you_seed') || (Math.random().toString(36).slice(2));
     localStorage.setItem('sim_you_seed', this.youSeed);
-    this.cachedRichestIdx = null;
-    this.cachedPoorestIdx = null;
-    this.cachedRichestWealth = null;
-    this.cachedPoorestWealth = null;
-        
+
+    // 3D SceneManager — created lazily the first time person view is opened
+    this.sceneManager     = null;
+    this.sceneCameraMode  = 'third';  // 'third' | 'first'
+
         this.initializeCharts();
         this.updateStatus();
         
@@ -97,45 +97,82 @@ class InequalitySimulator {
             this.setView('person');
         }
 
-        // Person carousel controls
-        const pLeft = document.getElementById('p-arrow-left');
-        const pRight = document.getElementById('p-arrow-right');
-        this.personOrder = ['card-richest','card-you','card-poorest'];
-        this.personIndex = 1;
-        const updatePHUD = () => {
-            const titles = ['Wealthiest','You','Poorest'];
-            const hud = document.getElementById('person-hud');
-            if (hud) hud.textContent = `${titles[this.personIndex]} (${this.personIndex+1}/3)`;
-        };
-        const showP = (i) => {
-            const cards = this.personOrder.map(id=>document.getElementById(id));
-            this.personIndex = (i+cards.length)%cards.length;
-            cards.forEach(el => el && el.classList.add('active'));
-            updatePHUD();
-        };
-        if (pLeft && pRight) {
-            pLeft.addEventListener('click', ()=> showP(this.personIndex-1));
-            pRight.addEventListener('click', ()=> showP(this.personIndex+1));
-        }
-        document.addEventListener('DOMContentLoaded', ()=> showP(1));
     }
+
+    /**
+     * setView(view)
+     * Toggle between 'person' (3D scene) and 'population' (charts).
+     * On the first switch to person view the SceneManager is created
+     * and GLB assets are loaded from /assets/.
+     */
     setView(view) {
         this.currentView = view;
-        const personView = document.getElementById('person-view');
+        const personView    = document.getElementById('person-view');
         const chartCarousel = document.getElementById('chart-carousel');
+
         if (view === 'person') {
             if (chartCarousel) chartCarousel.style.display = 'none';
-            if (personView) personView.style.display = 'block';
-            // pick a random agent index once per model init
-            if (this.youIndex == null && this.isInitialized) {
-                const popText = document.getElementById('status-population')?.textContent;
-                const pop = parseInt(popText || '0');
-                if (pop > 0) this.youIndex = Math.floor(Math.random() * pop);
-            }
-            this.updatePersonView();
+            if (personView)    personView.style.display    = 'block';
+
+            // Initialise Three.js scene the very first time
+            if (!this.sceneManager) this._initScene();
+
+            // If a model is already running, push data to scene immediately
+            if (this.isInitialized) this.updatePersonView();
+
         } else {
-            if (personView) personView.style.display = 'none';
+            if (personView)    personView.style.display    = 'none';
             if (chartCarousel) chartCarousel.style.display = 'block';
+        }
+    }
+
+    /**
+     * _initScene()
+     * Creates the SceneManager, initialises the Three.js renderer on the
+     * #scene canvas, and begins loading the four Mixamo GLB files.
+     * Called once, lazily, on the first switch to person view.
+     */
+    _initScene() {
+        const canvas = document.getElementById('scene');
+        if (!canvas || typeof SceneManager === 'undefined') {
+            console.warn('[app.js] SceneManager or #scene canvas not found.');
+            return;
+        }
+
+        this.sceneManager = new SceneManager(canvas);
+        this.sceneManager.init();
+
+        this.sceneManager.loadCharacter(() => {
+            // Fade out the loading overlay once all GLBs are ready
+            const loadingEl = document.getElementById('scene-loading');
+            if (loadingEl) {
+                gsap.to(loadingEl, {
+                    opacity: 0, duration: 0.5,
+                    onComplete: () => { loadingEl.style.display = 'none'; }
+                });
+            }
+            console.log('[app.js] Scene ready.');
+            if (this.isInitialized) this.updatePersonView();
+        });
+    }
+
+    /**
+     * toggleCameraMode()
+     * Called by the camera toggle button in landing.html.
+     * Flips between third-person (behind character) and first-person
+     * (eye level, crowd visible).
+     */
+    toggleCameraMode() {
+        this.sceneCameraMode = (this.sceneCameraMode === 'third') ? 'first' : 'third';
+        if (this.sceneManager) {
+            this.sceneManager.setCameraMode(this.sceneCameraMode);
+        }
+        const label = document.getElementById('cam-mode-label');
+        if (label) {
+            // Button always shows what you will switch TO next
+            label.innerHTML = this.sceneCameraMode === 'third'
+                ? '&#128065; First Person'
+                : '&#128694; Third Person';
         }
     }
     
@@ -193,9 +230,7 @@ class InequalitySimulator {
         this.agentPositions = {}; // Reset agent positions
         this.previousClassCounts = null; // Reset previous class counts for flow calculation
     this.youIndex = null; // reset chosen person on re-init
-    // keep youSeed stable across inits
-    this.cachedRichestIdx = null;
-    this.cachedPoorestIdx = null;
+    // youSeed stays stable so the same virtual person is tracked across re-inits
         
         // Reset line charts (Gini and Total Wealth)
         this.charts.gini.data.labels = [];
@@ -1288,169 +1323,133 @@ class InequalitySimulator {
         }
     }
 
+    /**
+     * updatePersonView()
+     * ------------------------------------------------------------------
+     * Called every simulation step when the person view is active.
+     *
+     * Fetches wealth + mobility data, finds "you" in the population,
+     * then:
+     *   1. Updates the HUD overlays (#you-bracket-badge, etc.)
+     *   2. Drives the 3D character via sceneManager.update()
+     *
+     * The old DiceBear avatar / richest-poorest card code is removed —
+     * the Three.js scene owns all of that visually now.
+     */
     async updatePersonView() {
         try {
             const status = await this.apiCall('/status');
             if (!status.initialized) return;
-            // Fetch wealth distribution to compute richest/poorest and select 'you'
-            const wealthData = await this.apiCall('/data/wealth-distribution');
-            let wealths = [];
-            let policies = [];
-            let isComparison = !wealthData.current && wealthData && typeof wealthData === 'object';
-            if (wealthData.current && Array.isArray(wealthData.current)) {
-                wealths = wealthData.current;
-                // For single policy mode, policy is uniform
-                policies = Array(wealths.length).fill(status.policy || '—');
+
+            // Fetch both endpoints in parallel for speed
+            const [wealthData, mobData] = await Promise.all([
+                this.apiCall('/data/wealth-distribution'),
+                this.apiCall('/data/mobility'),
+            ]);
+
+            // ── Flatten agent arrays ──────────────────────────────
+            let wealths  = [];  // number[]  — one entry per agent
+            let brackets = [];  // string[]  — 'Lower' | 'Middle' | 'Upper'
+
+            const isComparison = !wealthData.current;
+
+            if (!isComparison && Array.isArray(wealthData.current)) {
+                wealths  = wealthData.current;
+                const mobArr = Array.isArray(mobData)
+                    ? mobData
+                    : (Array.isArray(mobData?.current) ? mobData.current : []);
+                brackets = mobArr.map(a => a.bracket || 'Middle');
+                // Pad if lengths differ
+                while (brackets.length < wealths.length) brackets.push('Middle');
+
             } else if (isComparison) {
-                // Build arrays aligned per agent: wealths[] and policies[]
                 const order = ['econophysics', 'fascism', 'communism', 'capitalism'];
                 order.forEach(policy => {
-                    const arr = wealthData[policy] || [];
-                    arr.forEach(v => {
-                        wealths.push(v);
-                        policies.push(policy);
-                    });
+                    (wealthData[policy] || []).forEach(v  => wealths.push(v));
+                    (mobData[policy]    || []).forEach(a  => brackets.push(a.bracket || 'Middle'));
                 });
-                // If mobility endpoint returns richer objects per agent, prefer that mapping
-                try {
-                    const mob = await this.apiCall('/data/mobility');
-                    // mob is object {policy: [ {wealth, policy,...} ]}
-                    const wealths2 = [];
-                    const policies2 = [];
-                    order.forEach(policy => {
-                        const list = mob[policy] || [];
-                        list.forEach(a => {
-                            if (typeof a.wealth === 'number') {
-                                wealths2.push(a.wealth);
-                                policies2.push(a.policy || policy);
-                            }
-                        });
-                    });
-                    if (wealths2.length) { wealths = wealths2; policies = policies2; }
-                } catch(_) { /* fallback already set */ }
             }
+
             if (!wealths.length) return;
 
-            // Determine richest and poorest
-            // Stable tie-breaking: if multiple with same wealth, keep previous index if still matches
-            let richest = Math.max(...wealths);
-            let poorest = Math.min(...wealths);
-            let candidateRichestIdx = wealths.indexOf(richest);
-            let candidatePoorestIdx = wealths.indexOf(poorest);
-            let richestIdx = candidateRichestIdx;
-            let poorestIdx = candidatePoorestIdx;
-            if (this.cachedRichestWealth === richest && this.cachedRichestIdx != null && wealths[this.cachedRichestIdx] === richest) {
-                richestIdx = this.cachedRichestIdx;
-            }
-            if (this.cachedPoorestWealth === poorest && this.cachedPoorestIdx != null && wealths[this.cachedPoorestIdx] === poorest) {
-                poorestIdx = this.cachedPoorestIdx;
-            }
-
-            // pick 'you' index within bounds
+            // ── Pick "you" index (stable across steps) ────────────
             if (this.youIndex == null || this.youIndex >= wealths.length) {
                 this.youIndex = Math.floor(Math.random() * wealths.length);
             }
-            const youWealth = wealths[this.youIndex];
 
-            // Update DOM
+            const youWealth  = wealths[this.youIndex];
+            const youBracket = brackets[this.youIndex] || 'Middle';
+
+            // ── Percentile: what % of agents earn less than you ───
+            const below      = wealths.filter(w => w < youWealth).length;
+            const percentile = Math.round((below / wealths.length) * 100);
+            const pctLabel   = percentile >= 50
+                ? `Top ${100 - percentile}%`
+                : `Bottom ${percentile + 1}%`;
+
+            // ── Update HUD overlays ───────────────────────────────
             const fmt = (n) => {
                 if (typeof n !== 'number' || !isFinite(n)) return '—';
-                const parts = (val) => {
-                    if (Math.abs(val) >= 1e9) return (val/1e9).toFixed(1) + ' B';
-                    if (Math.abs(val) >= 1e6) return (val/1e6).toFixed(1) + ' M';
-                    if (Math.abs(val) >= 1e3) return (val/1e3).toFixed(1) + ' K';
-                    return val.toFixed(0);
-                };
-                return `$ ${parts(n)}`;
-            };
-            const policy = status.policy || '—';
-            const richestEl = document.getElementById('richest-wealth');
-            const poorestEl = document.getElementById('poorest-wealth');
-            const youEl = document.getElementById('you-wealth');
-            const youPolicyEl = document.getElementById('you-policy');
-            const richestPolicyEl = document.getElementById('richest-policy');
-            const poorestPolicyEl = document.getElementById('poorest-policy');
-            if (richestEl) richestEl.textContent = fmt(richest);
-            if (poorestEl) poorestEl.textContent = fmt(poorest);
-            if (youEl) youEl.textContent = fmt(youWealth);
-            // Policies per person
-            if (Array.isArray(policies) && policies.length === wealths.length) {
-                if (youPolicyEl) youPolicyEl.textContent = policies[this.youIndex] || policy;
-                if (richestPolicyEl) richestPolicyEl.textContent = policies[richestIdx] || policy;
-                if (poorestPolicyEl) poorestPolicyEl.textContent = policies[poorestIdx] || policy;
-            } else {
-                if (youPolicyEl) youPolicyEl.textContent = policy;
-                if (richestPolicyEl) richestPolicyEl.textContent = policy;
-                if (poorestPolicyEl) poorestPolicyEl.textContent = policy;
-            }
-
-            // Render avatars with mood based on absolute wealth relative to distribution
-            const renderAvatar = (elId, wealth, seed, mood) => {
-                const el = document.getElementById(elId);
-                if (!el) return;
-                
-                // Clear previous avatar
-                el.innerHTML = '';
-                
-                // Use the successor to the 'avataaars' style
-                const style = 'personas';
-                const encodedSeed = encodeURIComponent(seed || 'seed');
-
-                // Determine mouth parameter based on mood
-                let mouthParam = 'smirk';
-                if (mood === 'happy') mouthParam = 'smile';
-                else if (mood === 'sad') mouthParam = 'frown';
-                
-                // Eyes parameter remains 'default'
-                const eyesParam = 'open';
-
-                // Construct the updated URL for DiceBear API v8.x
-                const url = `https://api.dicebear.com/9.x/${style}/svg?seed=${encodedSeed}&mouth=${mouthParam}&eyes=${eyesParam}`;
-                console.log('Avatar URL:', url);
-                const img = document.createElement('img');
-                img.alt = 'avatar';
-                img.loading = 'lazy';
-                img.src = url;
-                el.appendChild(img);
-            };
-            
-            // compute mood by brackets, mirroring utilities.py
-            const sortedWealth = [...wealths].sort((a, b) => a - b);
-            const lowerBracket = sortedWealth[Math.floor(sortedWealth.length * 0.33)] || 0;
-            const upperBracket = sortedWealth[Math.floor(sortedWealth.length * 0.67)] || 0;
-            
-            const moodOf = (w) => {
-                if (w >= upperBracket) return 'happy';
-                if (w < lowerBracket) return 'sad';
-                return 'neutral';
+                if (Math.abs(n) >= 1e9) return `$ ${(n/1e9).toFixed(1)} B`;
+                if (Math.abs(n) >= 1e6) return `$ ${(n/1e6).toFixed(1)} M`;
+                if (Math.abs(n) >= 1e3) return `$ ${(n/1e3).toFixed(1)} K`;
+                return `$ ${n.toFixed(0)}`;
             };
 
+            const badgeEl  = document.getElementById('you-bracket-badge');
+            const wealthEl = document.getElementById('you-wealth-display');
+            const pctEl    = document.getElementById('you-percentile');
 
-            // update 'you' avatar with stable seed always
-            renderAvatar('you-avatar', youWealth, this.youSeed, moodOf(youWealth));
+            if (badgeEl) {
+                badgeEl.textContent = youBracket;
+                // Replace any existing bracket class with the current one
+                badgeEl.classList.remove('Lower', 'Middle', 'Upper');
+                badgeEl.classList.add(youBracket);
+            }
 
-            // only update richest/poorest avatars if identity changed
-            const richestChanged = this.cachedRichestIdx !== richestIdx;
-            const poorestChanged = this.cachedPoorestIdx !== poorestIdx;
-            if (richestChanged) {
-                this.cachedRichestIdx = richestIdx;
-                this.cachedRichestWealth = richest;
-                const rSeed = `richest-${richestIdx}`;
-                renderAvatar('richest-avatar', richest, rSeed, moodOf(richest));
+            // Animate wealth counter with GSAP instead of a hard set
+            if (wealthEl) {
+                const from = parseFloat(wealthEl.dataset.raw || '0');
+                const obj  = { val: from };
+                gsap.to(obj, {
+                    val: youWealth, duration: 0.6, ease: 'power1.out',
+                    onUpdate: () => { wealthEl.textContent = fmt(obj.val); }
+                });
+                wealthEl.dataset.raw = youWealth;
             }
-            if (poorestChanged) {
-                this.cachedPoorestIdx = poorestIdx;
-                this.cachedPoorestWealth = poorest;
-                const pSeed = `poorest-${poorestIdx}`;
-                renderAvatar('poorest-avatar', poorest, pSeed, moodOf(poorest));
+            if (pctEl) pctEl.textContent = pctLabel;
+
+            // ── Drive 3D character ────────────────────────────────
+            if (this.sceneManager && this.sceneManager.isLoaded) {
+                // Pass up to 18 crowd brackets (exclude "you")
+                const crowdBrackets = brackets
+                    .filter((_, i) => i !== this.youIndex)
+                    .slice(0, 18);
+
+                this.sceneManager.update({
+                    bracket:      youBracket,
+                    wealth:       youWealth,
+                    percentile,
+                    crowdBrackets,
+                });
             }
+
         } catch (e) {
-            console.warn('Person view update failed', e);
+            console.warn('[updatePersonView] failed:', e);
         }
+
+        // NOTE: All code below this line is now handled by the 3D scene.
+        // The old DiceBear avatar rendering and richest/poorest card logic
+        // has been removed. The virtual function body ends here.
+        return;
     }
 }
 
+// The original DiceBear avatar / richest-poorest card logic has been
+// removed. All person-view rendering is now handled by SceneManager (scene.js).
+
 // Global instance
+
 let simulator;
 
 // Initialize when page loads

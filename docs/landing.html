@@ -8,6 +8,25 @@
     <script>
       console.log('Chart.js loaded:', !!window.Chart);
     </script>
+
+    <!--
+      THREE.JS  (r151 — last version that ships examples as plain scripts,
+                 no ES-module build step required)
+      We load three files:
+        1. three.min.js      — the core library, puts THREE on window
+        2. GLTFLoader.js     — parses .glb / .gltf files
+        3. SkeletonUtils.js  — proper deep-clone of skinned meshes (needed for crowd)
+    -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.151.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.151.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.151.0/examples/js/utils/SkeletonUtils.js"></script>
+
+    <!--
+      GSAP 3  — animation library
+      We only need the core (gsap.min.js).
+      It puts `gsap` on window, giving us gsap.to(), gsap.timeline(), etc.
+    -->
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -521,42 +540,114 @@
                 left: 300px;
             }
         }
-        /* Person View Styles */
-        .person-view-grid {
-            display: flex;
-            flex-direction: row;
-            justify-content: center;
-            flex-wrap: wrap;
-            gap: 20px;
-            margin-top: 60px;
-        }
-        .person-card {
-            display: flex;
-            flex-direction: column; 
-            align-items: center;
-            justify-content: flex-start;
-            background: #2d2d2d;
-            border: 1px solid #404040;
-            border-radius: 10px;
-            padding: 16px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-            flex-grow: 1;
-            flex-basis: 150px;
-            min-width: 150px;
-        }
-        .person-wealth { color: #ecf0f1; font-size: 22px; font-weight: 800; margin-bottom: 8px; }
-        .person-policy { color: #a8c0ff; font-size: 13px; opacity: 0.95; margin-top: 10px; }
-    .person-name { color: #bdc3c7; font-weight: 700; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; margin-bottom: 6px; }
-
-        .avatar {
-            width: 160px; height: 200px;
+        /* ── 3D Scene Container ─────────────────────────────────────────
+           The scene-container fills the main-content area.
+           position:relative lets us layer the canvas and overlays on top
+           of each other using position:absolute children.
+        ────────────────────────────────────────────────────────────── */
+        .scene-container {
             position: relative;
-            background: #1f2a35;
-            border-radius: 8px;
-            border: 1px solid #4a5f7a;
-            margin: 8px 0;
+            width: 100%;
+            height: calc(100vh - 60px);  /* full height minus chart strip */
+            overflow: hidden;
+            background: #111827;
         }
-    .avatar img { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+        /* The Three.js canvas — fills the scene container exactly */
+        #scene {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* ── Loading overlay ───────────────────────────────────────────
+           Shown while GLB files are being fetched.
+           Hidden (display:none) once SceneManager calls the onReady cb.
+        ────────────────────────────────────────────────────────────── */
+        #scene-loading {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(17, 24, 39, 0.92);
+            color: #e0e0e0;
+            font-size: 15px;
+            z-index: 10;
+            gap: 16px;
+        }
+        .loading-spinner {
+            width: 44px; height: 44px;
+            border: 4px solid rgba(255,255,255,0.15);
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── HUD overlay — wealth/bracket info in the top-left ─────── */
+        #scene-overlay {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            pointer-events: none;   /* clicks pass through to the canvas */
+            z-index: 5;
+        }
+        #you-bracket-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            background: #334155;
+            color: #e2e8f0;
+            width: fit-content;
+            transition: background 0.6s;
+        }
+        #you-bracket-badge.Lower       { background: #7f1d1d; color: #fca5a5; }
+        #you-bracket-badge.Middle      { background: #1e3a5f; color: #93c5fd; }
+        #you-bracket-badge.Upper       { background: #14532d; color: #86efac; }
+        #you-wealth-display {
+            font-size: 32px;
+            font-weight: 800;
+            color: #f1f5f9;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+            line-height: 1;
+        }
+        #you-percentile {
+            font-size: 13px;
+            color: #94a3b8;
+        }
+
+        /* ── Camera toggle button — bottom-right corner ─────────────── */
+        #cam-toggle-btn {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 5;
+        }
+        #cam-toggle-btn button {
+            background: rgba(30, 41, 59, 0.85);
+            border: 1px solid #475569;
+            color: #e2e8f0;
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            backdrop-filter: blur(6px);
+            transition: background 0.2s, border-color 0.2s;
+        }
+        #cam-toggle-btn button:hover {
+            background: rgba(51, 65, 85, 0.95);
+            border-color: #64748b;
+        }
     </style>
 </head>
 <body>
@@ -665,25 +756,43 @@
     <div class="main-content" id="main-content">
         <div id="error-message" class="error" style="display: none;"></div>
 
-        <div id="person-view" style="display:none;" class="person-view-grid">
-            <div class="person-card" id="card-richest" data-title="Wealthiest">
-                <div class="person-name">Richest</div>
-                <div class="person-wealth" id="richest-wealth">—</div>
-                <div class="avatar" id="richest-avatar"></div>
-                <div class="person-policy" id="richest-policy">—</div>
+        <!--
+          PERSON VIEW — 3D Scene
+          ──────────────────────────────────────────────────────────────
+          This div is shown/hidden by setView() in app.js (same id as before
+          so the existing show/hide logic still works without changes).
+
+          Inside we have:
+            #scene-loading  — spinner, removed once character loads
+            #scene          — the Three.js WebGL canvas
+            #scene-overlay  — HUD: bracket badge, wealth number, percentile
+            #cam-toggle-btn — button to flip between 3rd/1st person
+        -->
+        <div id="person-view" style="display:none;" class="scene-container">
+
+            <!-- Loading state (hidden by SceneManager once GLBs are ready) -->
+            <div id="scene-loading">
+                <div class="loading-spinner"></div>
+                <p>Loading character...</p>
             </div>
-            <div class="person-card active" id="card-you" data-title="You">
-                <div class="person-name">You</div>
-                <div class="person-wealth" id="you-wealth">—</div>
-                <div class="avatar" id="you-avatar"></div>
-                <div class="person-policy" id="you-policy">—</div>
+
+            <!-- Three.js renders into this canvas -->
+            <canvas id="scene"></canvas>
+
+            <!-- HUD: top-left wealth info -->
+            <div id="scene-overlay">
+                <div id="you-bracket-badge">—</div>
+                <div id="you-wealth-display">—</div>
+                <div id="you-percentile">—</div>
             </div>
-            <div class="person-card" id="card-poorest" data-title="Poorest">
-                <div class="person-name">Poorest</div>
-                <div class="person-wealth" id="poorest-wealth">—</div>
-                <div class="avatar" id="poorest-avatar"></div>
-                <div class="person-policy" id="poorest-policy">—</div>
+
+            <!-- Camera mode toggle: bottom-right -->
+            <div id="cam-toggle-btn">
+                <button onclick="window.simulator && simulator.toggleCameraMode()">
+                    <span id="cam-mode-label">&#128065; First Person</span>
+                </button>
             </div>
+
         </div>
 
         <div class="chart-carousel" id="chart-carousel">
@@ -1018,6 +1127,11 @@
     })();
     </script>
 
+    <!--
+      scene.js must load AFTER Three.js (which defines window.THREE)
+      and BEFORE app.js (which creates a SceneManager instance).
+    -->
+    <script src="scene.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
