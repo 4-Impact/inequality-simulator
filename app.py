@@ -6,7 +6,6 @@ import threading
 import time
 import logging
 import os
-import sys
 import re
 import traceback
 
@@ -133,6 +132,24 @@ def explain_js(filename): return send_from_directory('explanatory/static/js', fi
 def explain_assets(filename): return send_from_directory('explanatory/static/assets', filename)
 
 # --- API Endpoints ---
+
+# Active policy: set by the Blockly editor whenever the user clicks
+# "Update Agent Logic". The frontend reads this to display the current policy.
+_active_policy = 'econophysics'
+
+@app.route('/api/set_active_policy', methods=['POST'])
+def set_active_policy():
+    global _active_policy
+    data = request.get_json(silent=True) or {}
+    policy = str(data.get('policy', 'econophysics')).strip()
+    if policy:
+        _active_policy = policy
+    return jsonify({'status': 'success', 'policy': _active_policy})
+
+@app.route('/api/get_active_policy', methods=['GET'])
+def get_active_policy():
+    return jsonify({'policy': _active_policy})
+
 @app.route('/api/system_reset', methods=['POST'])
 def system_reset():
     reset_logic_internal()
@@ -156,7 +173,7 @@ def initialize_model():
             population=population,
             start_up_required=start_up_required,
             patron=patron,
-            seed=42,
+            rng=42,
         )
     return jsonify({'status': 'initialized', 'policy': policy}), 200
 
@@ -164,10 +181,16 @@ def initialize_model():
 def step_model():
     global current_model
     if current_model is None: return jsonify({'error': 'Model not initialized'}), 400
-    with model_lock:
-        current_model.step()
-        current_model.datacollector.collect(current_model)
-    return jsonify({'status': 'success'})
+    try:
+        with model_lock:
+            current_model.step()
+            # datacollector.collect is already called inside WealthModel.step(),
+            # so we do NOT call it again here to avoid duplicate rows.
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        import traceback
+        logger.error("Exception in step_model:\n" + traceback.format_exc())
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 
 @app.route('/api/data/wealth-distribution', methods=['GET'])
 def get_wealth_distribution():
@@ -241,6 +264,29 @@ def get_total_wealth_data():
             model_data = current_model.datacollector.get_model_vars_dataframe()
             total_data = model_data['Total'].tolist() if 'Total' in model_data.columns else []
             return json_response({'current': total_data})
+
+@app.route('/api/data/exchanges', methods=['GET'])
+def get_exchanges():
+    global current_model
+    if current_model is None: return jsonify({'error': 'Model not initialized'}), 400
+    with model_lock:
+        edges = []
+        if current_model.policy == "comparison":
+            for sub_model in current_model.comparison_models.values():
+                for agent in sub_model.agents:
+                    uids = getattr(agent, 'last_paid_uids', [])
+                    amounts = getattr(agent, 'last_paid_amounts', [])
+                    for k, paid_uid in enumerate(uids):
+                        amt = amounts[k] if k < len(amounts) else 0
+                        edges.append([agent.unique_id, paid_uid, amt])
+        else:
+            for agent in current_model.agents:
+                uids = getattr(agent, 'last_paid_uids', [])
+                amounts = getattr(agent, 'last_paid_amounts', [])
+                for k, paid_uid in enumerate(uids):
+                    amt = amounts[k] if k < len(amounts) else 0
+                    edges.append([agent.unique_id, paid_uid, amt])
+        return json_response({'edges': edges})
 
 @app.route('/api/status', methods=['GET'])
 def get_status():
@@ -408,6 +454,15 @@ def sanitize_ai_response(json_text):
                     '.execute(self, self.model)', 
                     gen_code
                 )
+
+        # Ensure description is always a non-empty string
+        desc = data.get('description', '')
+        if not isinstance(desc, str) or not desc.strip():
+            print("WARNING: AI response missing 'description' field.")
+            data['description'] = ''
+        else:
+            print(f"AI description present ({len(desc)} chars): {desc[:80]}...")
+
         return data
     except Exception as e:
         print(f"Sanitization Warning: {e}")
@@ -430,19 +485,23 @@ def chat_endpoint():
     base_prompt = (
         "You are a Policy Generator for a Mesa Agent simulation (Mesa 3.0+). "
         "Convert the user's idea into a Python class and a Blockly block definition.\n\n"
-        
+
         "### CODING RULES (CRITICAL) ###\n"
         "1. **MESA 3.0 COMPATIBILITY**: `model.schedule.agents` DOES NOT EXIST. Use `model.agents` (it is a list).\n"
         "2. **SCOPE SAFETY**: This code runs inside `Agent.step(self)`. The variable `model` is NOT global. You MUST use `self.model`.\n"
-        "3. **GENERATOR**: In the block generator, pass `self.model` to your class. Ex: `MyPol().execute(self, self.model)`.\n\n"
+        "3. **GENERATOR**: In the block generator, pass `self.model` to your class. Ex: `MyPol().execute(self, self.model)`.\n"
         "4. **ATTRIBUTES**: Verify attributes exist. The model has `survival_cost` (NOT survival_amount or threshold).\n\n"
-        
+
         "### OUTPUT FORMAT (Strict JSON) ###\n"
+        "Return a single JSON object with ALL four of these fields:\n"
         "{\n"
+        '  "description": "A plain-English, numbered step-by-step explanation of exactly what this policy does during each simulation step. Each numbered step should be one sentence describing one action. Example: \'1. Every agent pays 10% of their wealth as tax. 2. The collected tax is pooled together. 3. The pool is divided equally among agents below the survival threshold.\'",\n'
         '  "python_code": "class MyPolicy:\\n    def execute(self, agent, model):\\n        # logic",\n'
         '  "block_json": { "type": "my_policy", "message0": "Execute My Policy", "previousStatement": null, "nextStatement": null, "colour": 0 },\n'
         '  "block_generator": "Blockly.Python.forBlock[\'my_policy\'] = function(block) { return \'MyPolicy().execute(self, self.model)\\n\'; };"\n'
-        "}\n"
+        "}\n\n"
+        "The `description` field is REQUIRED and must be a numbered list explaining the policy mechanics "
+        "in plain language that a non-programmer can understand. Do not use code or technical jargon in the description.\n"
     )
 
     current_prompt = base_prompt + f"\nUser Idea: {user_query}"

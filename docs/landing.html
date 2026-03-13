@@ -4,10 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inequality Simulator</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
-    <script>
-      console.log('Chart.js loaded:', !!window.Chart);
-    </script>
 
     <!--
       THREE.JS  (r151 — last version that ships examples as plain scripts,
@@ -17,15 +13,9 @@
         2. GLTFLoader.js     — parses .glb / .gltf files
         3. SkeletonUtils.js  — proper deep-clone of skinned meshes (needed for crowd)
     -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.151.0/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.151.0/examples/js/loaders/GLTFLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.151.0/examples/js/utils/SkeletonUtils.js"></script>
-
-    <!--
-      GSAP 3  — animation library
-      We only need the core (gsap.min.js).
-      It puts `gsap` on window, giving us gsap.to(), gsap.timeline(), etc.
-    -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/utils/SkeletonUtils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
     <style>
         body {
@@ -248,69 +238,6 @@
             margin-left: 0;
         }
 
-        /* === Single-chart carousel === */
-        .chart-carousel {
-        position: relative;
-        margin-top: 60px;
-        background-color: #2d2d2d;
-        border: 1px solid #404040;
-        border-radius: 10px;
-        padding: 12px 56px; /* room for arrows */
-        box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-        }
-
-        .charts-track {
-        width: 100%;
-        }
-
-        /* Only one chart visible */
-        .chart-container {
-        display: none;
-        margin: 0;
-        background: transparent;
-        border: none;
-        box-shadow: none;
-        padding: 0;
-        }
-
-        .chart-container.active {
-        display: block;
-        }
-
-        canvas { max-height: 420px; }
-
-        /* Arrows */
-        .nav-arrow {
-        position: absolute;
-        top: 50%;
-        transform: translateY(-50%);
-        width: 44px;
-        height: 44px;
-        border-radius: 50%;
-        border: 1px solid #4a5f7a;
-        background: #2c3e50;
-        color: #ecf0f1;
-        cursor: pointer;
-        display: grid;
-        place-items: center;
-        font-size: 22px;
-        transition: transform .15s, background .2s;
-        z-index: 2;
-        }
-        .nav-arrow:hover { background:#34495e; transform: translateY(-50%) scale(1.05); }
-        .nav-arrow.left { left: 10px; }
-        .nav-arrow.right { right: 10px; }
-
-        /* Small title + index for mobile */
-        .chart-hud {
-        text-align: center;
-        margin-top: 10px;
-        color: #bdc3c7;
-        font-size: 14px;
-        }
-
-        /* Kill old grid layout if any leftover CSS references it */
-        .charts-grid { display: none !important; }
 
         .toggle-switch {
             position: relative;
@@ -358,10 +285,6 @@
             transform: translateX(26px);
         }
 
-        @media (max-width: 768px) {
-        .chart-carousel { padding: 10px 48px; }
-        canvas { max-height: 360px; }
-        }
         .error {
             background-color: #d32f2f;
             color: white;
@@ -513,25 +436,6 @@
                 margin-left: 280px;
             }
             
-            .sidebar-toggle.sidebar-visible {
-                left: 300px;
-            }
-            
-            .charts-grid {
-                grid-template-columns: 1fr;
-                gap: 15px;
-            }
-        }
-        
-        @media (max-width: 768px) {
-            .sidebar {
-                width: 280px;
-            }
-            
-            .main-content {
-                margin-left: 280px;
-            }
-            
             .main-content.sidebar-hidden {
                 margin-left: 0;
             }
@@ -547,18 +451,90 @@
         ────────────────────────────────────────────────────────────── */
         .scene-container {
             position: relative;
-            width: 100%;
-            height: calc(100vh - 60px);  /* full height minus chart strip */
+            /* Break out of main-content's 20px padding on all sides */
+            margin: -20px;
+            width: calc(100% + 40px);
+            /* Fill viewport minus the top navbar (~60px) */
+            height: calc(100vh - 60px);
             overflow: hidden;
             background: #111827;
         }
 
-        /* The Three.js canvas — fills the scene container exactly */
+        /* The Three.js canvas — fills the scene container exactly.
+           max-height must be none to override any global canvas rules. */
         #scene {
             display: block;
             width: 100%;
             height: 100%;
+            max-height: none;
         }
+
+        /* ── Character picker overlay ─────────────────────────────────────────
+           Sits on top of the canvas, same z-layer as the loading spinner. */
+        #char-picker {
+            position:       absolute;
+            inset:          0;
+            display:        flex;
+            align-items:    center;
+            justify-content: center;
+            background:     rgba(17, 24, 39, 0.88);
+            backdrop-filter: blur(6px);
+            z-index:        20;
+        }
+        #char-picker-inner {
+            text-align:  center;
+            color:       #e5e7eb;
+            max-width:   560px;
+            padding:     24px;
+        }
+        #char-picker-title {
+            font-size:   1.5rem;
+            font-weight: 700;
+            margin:      0 0 6px;
+            color:       #f9fafb;
+        }
+        #char-picker-sub {
+            font-size:   0.85rem;
+            color:       #9ca3af;
+            margin:      0 0 24px;
+        }
+        #char-picker-grid {
+            display:     flex;
+            flex-wrap:   wrap;
+            gap:         16px;
+            justify-content: center;
+        }
+        .char-card {
+            width:           118px;
+            padding:         14px 12px;
+            background:      #1f2937;
+            border:          2px solid #374151;
+            border-radius:   12px;
+            cursor:          pointer;
+            transition:      border-color 0.2s, transform 0.15s, background 0.2s;
+            display:         flex;
+            flex-direction:  column;
+            align-items:     center;
+            gap:             10px;
+            color:           #e5e7eb;
+        }
+        .char-card:hover {
+            border-color:    #3b82f6;
+            background:      #263348;
+            transform:       translateY(-3px);
+        }
+        .char-portrait {
+            width:           84px;
+            height:          84px;
+            border-radius:   999px;
+            object-fit:      cover;
+            object-position: center;
+            display:         block;
+            background:      radial-gradient(circle at 50% 32%, #334155 0%, #0f172a 100%);
+            border:          2px solid #475569;
+            box-shadow:      0 6px 16px rgba(0, 0, 0, 0.28);
+        }
+        .char-name  { font-size: 0.8rem; font-weight: 600; letter-spacing: 0.03em; }
 
         /* ── Loading overlay ───────────────────────────────────────────
            Shown while GLB files are being fetched.
@@ -586,13 +562,14 @@
         }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* ── HUD overlay — wealth/bracket info in the top-left ─────── */
+        /* ── HUD overlay — wealth/bracket info in the bottom-right ─────── */
         #scene-overlay {
             position: absolute;
-            top: 16px;
-            left: 16px;
+            bottom: 80px;
+            right: 20px;
             display: flex;
             flex-direction: column;
+            align-items: flex-end;
             gap: 6px;
             pointer-events: none;   /* clicks pass through to the canvas */
             z-index: 5;
@@ -621,8 +598,81 @@
             line-height: 1;
         }
         #you-percentile {
-            font-size: 13px;
+            font-size: 17px;
+            font-weight: 600;
+            color: #e2e8f0;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+        }
+        /* Third-person: wealth + percent shown above the character by the
+           scene overlay label — hide them from the corner HUD.             */
+        #you-wealth-display,
+        #you-percentile { display: none; }
+        /* First-person: player label is off, so restore them in the corner. */
+        #scene-overlay.fp-hud #you-wealth-display,
+        #scene-overlay.fp-hud #you-percentile { display: block; }
+
+        /* ── Collapsible sidebar sections ─────────────────────────────── */
+        .section-title.collapsible {
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .section-title.collapsible .chevron {
+            font-size: 11px;
+            transition: transform 0.2s;
             color: #94a3b8;
+            flex-shrink: 0;
+        }
+        .section-title.collapsed .chevron {
+            transform: rotate(-90deg);
+        }
+        .section-body {
+            overflow: hidden;
+            transition: max-height 0.28s ease, opacity 0.2s;
+            max-height: 800px;
+            opacity: 1;
+        }
+        .section-body.collapsed {
+            max-height: 0;
+            opacity: 0;
+        }
+
+        /* ── Live stat cards ─────────────────────────────────────────────── */
+        .sidebar-stats {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: #1e2d3d;
+            border: 1px solid #3a5068;
+            border-radius: 8px;
+            padding: 12px 8px 10px;
+            text-align: center;
+        }
+        .stat-label {
+            font-size: 10px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            line-height: 1.4;
+        }
+        .stat-label .info-button { flex-shrink: 0; }
+        .stat-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: #f1f5f9;
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.01em;
         }
 
         /* ── Camera toggle button — bottom-right corner ─────────────── */
@@ -648,6 +698,81 @@
             background: rgba(51, 65, 85, 0.95);
             border-color: #64748b;
         }
+
+        /* ── Scene overlay labels (world-space HTML labels projected from 3D) ── */
+        .scene-label {
+            position: absolute;
+            pointer-events: none;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            font-family: inherit;
+            z-index: 6;
+            line-height: 1.3;
+        }
+        .player-label {
+            text-align: center;
+            transform: translate(-50%, -100%);
+            padding-bottom: 4px;
+        }
+        .label-arrow {
+            font-size: 20px;
+            color: #60a5fa;
+            text-shadow: 0 0 8px rgba(96,165,250,0.9);
+            animation: bounce-arrow 1s ease-in-out infinite;
+        }
+        @keyframes bounce-arrow {
+            0%, 100% { transform: translateY(0); }
+            50%       { transform: translateY(5px); }
+        }
+        .label-wealth {
+            font-size: 14px;
+            font-weight: 700;
+            color: #f1f5f9;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.95);
+            background: rgba(0,0,0,0.6);
+            padding: 2px 8px;
+            border-radius: 4px;
+            display: inline-block;
+        }
+        .label-pct {
+            font-size: 11px;
+            color: #94a3b8;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.95);
+        }
+        .pop-badge {
+            transform: translate(-50%, -100%);
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            color: #f1f5f9;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+        }
+        .richest-badge {
+            background: rgba(133, 100, 4, 0.82);
+            border: 1px solid rgba(234,179,8,0.55);
+        }
+        .poorest-badge {
+            background: rgba(90, 26, 26, 0.82);
+            border: 1px solid rgba(220,38,38,0.5);
+        }
+        .hover-tip {
+            transform: translate(-50%, -100%);
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 7px 14px;
+            font-size: 13px;
+            text-align: center;
+            color: #e2e8f0;
+            backdrop-filter: blur(4px);
+            box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+        }
+        /* First-person mode: reduce wealth display font size */
+        #scene-overlay.fp-hud #you-wealth-display {
+            font-size: 26px;
+        }
     </style>
 </head>
 <body>
@@ -662,94 +787,93 @@
         </div>
         
         <div class="sidebar-content">
-            <div class="controls-section" id="view-controls">
-                <div class="section-title">View</div>
-                <div class="control-group">
-                    <label for="view-select">Display</label>
-                    <select id="view-select">
-                        <option value="population">Population</option>
-                        <option value="person" selected>Person</option>
-                    </select>
+
+            <!-- Hidden inputs kept for app.js compatibility -->
+            <select id="view-select" style="display:none;"><option value="person" selected>Person</option><option value="population">Population</option></select>
+            <input type="number" id="population-input" value="100" min="50" max="1000" style="display:none;">
+            <input type="checkbox" id="patron-toggle" style="display:none;">
+            <span id="status-text" style="display:none;"></span>
+            <span id="backend-status" style="display:none;"></span>
+            <span id="status-policy" style="display:none;"></span>
+            <span id="status-population" style="display:none;"></span>
+
+            <!-- Live stat cards (stacked) -->
+            <div class="sidebar-stats">
+                <div class="stat-card">
+                    <div class="stat-label">
+                        Population Wealth
+                        <button class="info-button" onclick="showInfoModal('totalWealth')">?</button>
+                    </div>
+                    <div class="stat-value" id="stat-total-wealth">—</div>
                 </div>
-            </div>
-            <div class="status-section">
-                <div class="status-title">System Status</div>
-                <div class="status-item">
-                    Status: <span class="status-value" id="status-text">Initializing...</span>
-                </div>
-                <div class="status-item">
-                    Backend: <span class="status-value" id="backend-status">Detecting...</span>
-                </div>
-                <div class="status-item">
-                    Policy: <span class="status-value" id="status-policy">-</span>
-                </div>
-                <div class="status-item">
-                    Population: <span class="status-value" id="status-population">-</span>
+                <div class="stat-card">
+                    <div class="stat-label">
+                        Inequality Metric
+                        <button class="info-button" onclick="showInfoModal('gini')">?</button>
+                    </div>
+                    <div class="stat-value" id="stat-gini">—</div>
                 </div>
             </div>
 
+            <!-- Model Configuration (collapsible, open by default) -->
             <div class="controls-section">
-                <div class="section-title">Model Configuration</div>
-                
-                <div class="control-group">
-                    <div class="parameter-header">
-                        <label for="policy-select">Policy:</label>
-                        <button class="info-button" onclick="showInfoModal(document.getElementById('policy-select').value)">?</button>
-                    </div>
-                    <select id="policy-select">
-                        <option value="econophysics" selected>Econophysics</option>
-                        <option value="fascism">Fascism</option>
-                        <option value="communism">Communism</option>
-                        <option value="capitalism">Capitalism</option>
-                        <option value="comparison">Comparison</option>
-                    </select>
+                <div class="section-title collapsible" onclick="toggleSection('section-config')">
+                    Model Configuration <span class="chevron">&#9660;</span>
                 </div>
-
-                <div class="control-group">
-                    <div class="parameter-header">
-                        <label for="population-input">Population:</label>
-                        <button class="info-button" onclick="showInfoModal('population')">?</button>
+                <div class="section-body" id="section-config">
+                    <div class="control-group" style="margin-top:12px;">
+                        <div class="parameter-header">
+                            <label>Policy</label>
+                            <button class="info-button" id="policy-info-btn" onclick="showInfoModal(currentActivePolicy)">?</button>
+                        </div>
+                        <!-- Policy is now set from the Blockly editor; this display
+                             updates automatically via /api/get_active_policy polling. -->
+                        <div id="policy-display" style="
+                            background:#2d3748; border:1px solid #4a5568; border-radius:4px;
+                            padding:6px 10px; color:#e2e8f0; font-size:0.9em;
+                            display:flex; align-items:center; justify-content:space-between;">
+                            <span id="policy-display-label">Econophysics</span>
+                            <a href="/blockly/" target="_blank"
+                               style="font-size:0.8em; color:#9b59b6; text-decoration:none; white-space:nowrap;">
+                               ✏ Edit in Blockly
+                            </a>
+                        </div>
+                        <!-- Hidden input keeps the rest of the JS working unchanged -->
+                        <input type="hidden" id="policy-select" value="econophysics">
                     </div>
-                    <input type="number" id="population-input" value="200" min="50" max="1000">
                 </div>
-
-                <div class="control-group">
-                    <div class="parameter-header">
-                        <label for="patron-toggle">Patron Effect:</label>
-                        <button class="info-button" onclick="showInfoModal('patron')">?</button>
-                    </div>
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="patron-toggle">
-                        <span class="slider"></span>
-                    </label>
-                </div>
-
             </div>
 
+            <!-- Model Controls (collapsible, open by default) -->
             <div class="buttons-section">
-                <div class="section-title">Model Controls</div>
-                
-                <button id="initialize-btn" class="btn-primary" onclick="initializeModel()">
-                    Initialize Model
-                </button>
-                
-                <button id="step-btn" class="btn-success" onclick="stepModel()" disabled>
-                    Single Step
-                </button>
-                
-                <button id="continuous-run-btn" class="btn-warning" onclick="startContinuousRun()" disabled>
-                    Start Continuous
-                </button>
-                
-                <button id="stop-btn" class="btn-danger" onclick="stopContinuousRun()" disabled style="display: none;">
-                    Stop Continuous
-                </button>
-                <a href="/blockly/" target="_blank" style="text-decoration: none;">
-                    <button class="btn-primary" style="background-color: #9b59b6;">
-                        Open Policy Editor (Blockly)
+                <div class="section-title collapsible" onclick="toggleSection('section-controls')">
+                    Model Controls <span class="chevron">&#9660;</span>
+                </div>
+                <div class="section-body" id="section-controls" style="padding-top:10px;">
+                    <button id="initialize-btn" class="btn-primary" onclick="initializeModel()">
+                        Initialize Model
                     </button>
-                </a>
+
+                    <button id="step-btn" class="btn-success" onclick="stepModel()" disabled>
+                        Single Step
+                    </button>
+
+                    <button id="continuous-run-btn" class="btn-warning" onclick="startContinuousRun()" disabled>
+                        Start Continuous
+                    </button>
+
+                    <button id="stop-btn" class="btn-danger" onclick="stopContinuousRun()" disabled style="display:none;">
+                        Stop Continuous
+                    </button>
+
+                    <a href="/blockly/" target="_blank" style="text-decoration:none;">
+                        <button class="btn-primary" style="background-color:#9b59b6;">
+                            Open Policy Editor
+                        </button>
+                    </a>
+                </div>
             </div>
+
         </div>
     </div>
 
@@ -776,6 +900,15 @@
                 <p>Loading character...</p>
             </div>
 
+            <!-- Character picker overlay: shown after GLBs load, before sim starts -->
+            <div id="char-picker" style="display:none;">
+                <div id="char-picker-inner">
+                    <h2 id="char-picker-title">Choose your character</h2>
+                    <p id="char-picker-sub">You can change this at any time</p>
+                    <div id="char-picker-grid"></div>
+                </div>
+            </div>
+
             <!-- Three.js renders into this canvas -->
             <canvas id="scene"></canvas>
 
@@ -789,54 +922,11 @@
             <!-- Camera mode toggle: bottom-right -->
             <div id="cam-toggle-btn">
                 <button onclick="window.simulator && simulator.toggleCameraMode()">
-                    <span id="cam-mode-label">&#128065; First Person</span>
+                    <span id="cam-mode-label">&#128694; Third Person</span>
                 </button>
             </div>
 
         </div>
-
-        <div class="chart-carousel" id="chart-carousel">
-        <button class="nav-arrow left" id="arrow-left" aria-label="Previous chart">⟨</button>
-
-        <div class="charts-track" id="charts-track">
-            <div class="chart-container" data-title="Total Wealth Over Time" id="container-total-wealth">
-            <div class="chart-header">
-                <div class="chart-title">Total Wealth Over Time</div>
-                <button class="info-button" onclick="showInfoModal('totalWealth')">?</button>
-            </div>
-            <canvas id="total-wealth-chart"></canvas>
-            </div>
-
-            <div class="chart-container" data-title="Gini Coefficient Over Time" id="container-gini">
-            <div class="chart-header">
-                <div class="chart-title">Gini Coefficient Over Time</div>
-                <button class="info-button" onclick="showInfoModal('gini')">?</button>
-            </div>
-            <canvas id="gini-chart"></canvas>
-            </div>
-
-            <div class="chart-container" data-title="Wealth Distribution" id="container-wealth">
-            <div class="chart-header">
-                <div class="chart-title">Wealth Distribution</div>
-                <button class="info-button" onclick="showInfoModal('wealthDistribution')">?</button>
-            </div>
-            <canvas id="wealth-chart"></canvas>
-            </div>
-            <div class="chart-container" data-title="Economic Mobility" id="container-mobility">
-            <div class="chart-header">
-                <div class="chart-title">Economic Mobility</div>
-                <button class="info-button" onclick="showInfoModal('mobility')">?</button>
-            </div>
-            <div id="mobility-metrics" class="chart-metrics"> </div>
-            <canvas id="mobility-chart"></canvas>
-            </div>
-        </div>
-
-    <button class="nav-arrow right" id="arrow-right" aria-label="Next chart">⟩</button>
-
-    <div class="chart-hud" id="chart-hud">Total Wealth Over Time (1/4)</div>
-    </div>
-
 
     <div id="info-modal" class="modal">
         <div class="modal-content">
@@ -1003,23 +1093,27 @@
             const footer = document.getElementById('modal-footer');
             const confirmBtn = document.getElementById('modal-confirm-btn');
 
-            if (infoContent[type]) {
-                title.textContent = infoContent[type].title;
-                body.innerHTML = infoContent[type].content;
-                modal.style.display = 'block';
+            // Look up known content; for custom/AI-generated policies fall back
+            // to a generic description so the modal always opens.
+            const info = infoContent[type] || {
+                title: getPolicyDisplayLabel(type),
+                content: `<p>This is a custom policy created in the Blockly editor.</p>
+                          <p>Open the <a href="/blockly/" target="_blank">Policy Editor</a> to view or modify it.</p>`
+            };
 
-                if (onConfirm) {
-                    footer.style.display = 'block';
-                    confirmationCallback = onConfirm;
-                    confirmBtn.onclick = () => {
-                        if (confirmationCallback) {
-                            confirmationCallback();
-                        }
-                        closeInfoModal();
-                    };
-                } else {
-                    footer.style.display = 'none';
-                }
+            title.textContent = info.title;
+            body.innerHTML    = info.content;
+            modal.style.display = 'block';
+
+            if (onConfirm) {
+                footer.style.display = 'block';
+                confirmationCallback = onConfirm;
+                confirmBtn.onclick = () => {
+                    if (confirmationCallback) confirmationCallback();
+                    closeInfoModal();
+                };
+            } else {
+                footer.style.display = 'none';
             }
         }
 
@@ -1035,6 +1129,15 @@
             if (event.target === modal) {
                 closeInfoModal();
             }
+        }
+
+        // Accordion section toggle
+        function toggleSection(id) {
+            const body  = document.getElementById(id);
+            const title = body?.previousElementSibling;
+            if (!body) return;
+            const isCollapsed = body.classList.toggle('collapsed');
+            if (title) title.classList.toggle('collapsed', isCollapsed);
         }
 
         // Sidebar toggle functionality
@@ -1054,78 +1157,48 @@
                 toggleBtn.textContent = '✕';
             }
         }
+
+        // ── Active-policy label ───────────────────────────────────────────────
+        // The Blockly editor POSTs the active policy to /api/set_active_policy
+        // whenever the user saves. We poll here so that if the editor is open in
+        // another tab the sidebar updates without a page refresh.
+        var currentActivePolicy = 'econophysics';
+
+        var POLICY_LABELS = {
+            'econophysics': 'Econophysics',
+            'fascism':       'Fascism',
+            'capitalism':    'Capitalism',
+            'communism':     'Communism',
+            'comparison':    'Comparison'
+        };
+
+        function getPolicyDisplayLabel(key) {
+            return POLICY_LABELS[key] ||
+                   key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        }
+
+        function syncActivePolicy() {
+            fetch('/api/get_active_policy')
+                .then(r => r.json())
+                .then(d => {
+                    var key = d.policy || 'econophysics';
+                    if (key === currentActivePolicy) return; // no change
+                    currentActivePolicy = key;
+                    // Update the hidden input (initializeModel() reads it)
+                    var hidden = document.getElementById('policy-select');
+                    if (hidden) hidden.value = key;
+                    // Update the visible label
+                    var lbl = document.getElementById('policy-display-label');
+                    if (lbl) lbl.textContent = getPolicyDisplayLabel(key);
+                })
+                .catch(() => {}); // silent fail if server is unreachable
+        }
+
+        // Initial fetch + poll every 5 s
+        syncActivePolicy();
+        setInterval(syncActivePolicy, 5000);
     </script>
 
-    <script>
-    // === Chart Carousel Controller ===
-    (function () {
-        const order = [
-        'container-total-wealth',
-        'container-gini',
-        'container-wealth',
-        'container-mobility'
-        ];
-
-        let index = 0;
-        const left  = document.getElementById('arrow-left');
-        const right = document.getElementById('arrow-right');
-        const hud   = document.getElementById('chart-hud');
-
-        function containers() {
-        return order.map(id => document.getElementById(id)).filter(Boolean);
-        }
-
-        function updateHUD() {
-        const el = containers()[index];
-        const title = el?.getAttribute('data-title') ?? `Chart ${index+1}`;
-        hud.textContent = `${title} (${index+1}/${order.length})`;
-        }
-
-        function show(i) {
-        const all = containers();
-        if (!all.length) return;
-        index = (i + all.length) % all.length;
-        all.forEach((el, idx) => el.classList.toggle('active', idx === index));
-
-        // If a hidden Chart.js canvas becomes visible, call resize to fix sizing
-        const canvas = all[index].querySelector('canvas');
-        if (canvas && canvas._chartInstance) {
-            // If you store references, call .resize() on your instances here.
-            try { canvas._chartInstance.resize(); } catch(e) {}
-        }
-        updateHUD();
-        }
-
-        function next() { show(index + 1); }
-        function prev() { show(index - 1); }
-
-        // Keyboard
-        window.addEventListener('keydown', (e) => {
-        if (e.key === 'ArrowRight') next();
-        if (e.key === 'ArrowLeft') prev();
-        });
-
-        // Buttons
-        left.addEventListener('click', prev);
-        right.addEventListener('click', next);
-
-        // Touch swipe
-        let touchStartX = 0, touchEndX = 0;
-        const area = document.getElementById('chart-carousel');
-        area.addEventListener('touchstart', (e) => { touchStartX = e.changedTouches[0].screenX; }, {passive:true});
-        area.addEventListener('touchend',   (e) => {
-        touchEndX = e.changedTouches[0].screenX;
-        const dx = touchEndX - touchStartX;
-        if (Math.abs(dx) > 40) (dx < 0 ? next : prev)();
-        }, {passive:true});
-
-        // Expose small API if you ever need to jump from code
-        window.ChartCarousel = { show, next, prev };
-
-        // Kickoff once DOM is ready
-        document.addEventListener('DOMContentLoaded', () => show(0));
-    })();
-    </script>
 
     <!--
       scene.js must load AFTER Three.js (which defines window.THREE)

@@ -21,11 +21,14 @@ The application runs as a **Flask REST API backend** with a **vanilla HTML/CSS/J
 | Simulation engine | [Mesa 3.0+](https://mesa.readthedocs.io/) (agent-based modelling) |
 | Backend | Flask + Flask-CORS |
 | AI integration | Google Gemini (`google-genai`, model: `gemini-2.0-flash` / `gemini-2.5-pro`) |
-| Frontend | Vanilla HTML / CSS / JavaScript (Chart.js for visualisations) |
+| Frontend | Vanilla HTML / CSS / JavaScript |
+| 3D visualisation | [Three.js](https://threejs.org/) r134 (GLTFLoader, SkeletonUtils, OrbitControls, AnimationMixer) + GSAP 3.12.5 tweens |
 | Custom policy UI | [Blockly](https://developers.google.com/blockly) (visual programming blocks) |
 | Maths/stats | NumPy, SciPy |
 | Config | `python-dotenv`, `GOOGLE_API_KEY` env var |
 | Entry point | `run.py` → starts Flask on port 5000 |
+
+> **Note:** Chart.js has been removed. There are no chart visualisations in the UI. The sidebar instead shows two live stat cards (Population Wealth and Gini) that are updated directly via API calls.
 
 ---
 
@@ -50,7 +53,11 @@ inequality-simulator/
 ├── docs/
 │   ├── index.html       # Landing page (served at /)
 │   ├── landing.html     # Main simulator UI (served at /simulator)
-│   └── app.js           # Frontend JavaScript
+│   ├── app.js           # Frontend JavaScript (simulation control, stat card updates)
+│   ├── scene.js         # Three.js SceneManager — 3D character rendering & animation
+│   ├── glb-debug.html   # Standalone GLB diagnostic viewer (dev tool)
+│   └── assets/          # GLB character models (ben, brian, james, jody, joe, kate,
+│                         #   leonard, louise, megan, remy, suzie)
 └── explanatory/         # Static explainer pages for each policy
     ├── templates/        # HTML templates (econophysics, capitalism, communism, fascism)
     └── static/           # CSS and JS for explainer animations
@@ -64,16 +71,16 @@ inequality-simulator/
 
 **Constructor parameters:**
 - `policy` (str, default `"econophysics"`) — which economic policy to run
-- `population` (int, default `200`) — number of agents
+- `population` (int, default `100`) — number of agents
 - `start_up_required` (int 1–3, default `1`) — capital barrier to innovation (used by capitalism policy)
 - `patron` (bool, default `False`) — enables patron/client dynamics
-- `seed` (int, default `42`)
+- `rng` (int, default `42`) — random seed passed directly to `mesa.Model.__init__`
 
 **Key attributes:**
 - `self.policy` — active policy string
 - `self.agents` — Mesa AgentSet (Mesa 3.0: do NOT use `model.schedule.agents`)
 - `self.brackets` — `[lower_threshold, upper_threshold]` for wealth class bands
-- `self.survival_cost` — flat cost paid each step (default `1`)
+- `self.survival_cost` — per-step survival cost; initialised to `1` and **recalculated each step** as the 10th percentile of an exponential distribution scaled to mean agent wealth (`expon.ppf(0.1, scale=mean_wealth)`)
 - `self.total` — total wealth in the economy
 - `self.comparison_models` — dict of sub-models (only in `"comparison"` mode)
 - `self.comparison_results` — dict storing per-policy time series data
@@ -106,6 +113,7 @@ inequality-simulator/
 - `self.bracket_history` — last 20 bracket values (for mobility calculation)
 - `self.mobility` — Bartholomew mobility ratio [0, 1]
 - `self.innovating` — bool; whether agent is currently in an innovation cycle
+- `self.last_paid_uids` — list of `unique_id`s paid during the last step (used by `/api/data/exchanges`)
 
 **Step logic:**
 1. Reload `user_logic.py` (hot-reload for live custom code)
@@ -126,9 +134,12 @@ Called by all policies. Three-phase wealth exchange per step:
 2. **Survival cost**: pay `model.survival_cost` to a random agent; if broke, reset wealth to 1
 3. **Thrive cost**: pay a random agent a proportion of wealth based on their `W`
 
+Each payment records the recipient's `unique_id` into `agent.last_paid_uids`.
+
 ### `Fascism`
 - Party elites (top 5% by W) collect a 20% tax from non-elite agents each step
-- Non-elites still participate in `WealthExchange` afterwards
+- Non-elites participate in `WealthExchange` afterwards
+- **Party elites do NOT run `WealthExchange`** — they receive tax income passively and skip all survival/thrive cost payments
 
 ### `Communism`
 - Each step: redistribute total wealth equally among all agents (`each_wealth = total / population`)
@@ -182,6 +193,7 @@ Called by all policies. Three-phase wealth exchange per step:
 | `/api/data/mobility` | GET | Agent bracket/mobility/wealth data |
 | `/api/data/gini` | GET | Gini coefficient time series |
 | `/api/data/total-wealth` | GET | Total wealth time series |
+| `/api/data/exchanges` | GET | Returns `{edges: [[from_uid, to_uid], ...]}` — wealth transfer pairs from last step |
 
 ### Code / Custom Policy API
 | Route | Method | Description |
@@ -226,6 +238,7 @@ gemini_client: genai.Client | None
 - The model has `survival_cost` — NOT `survival_amount` or `survival_threshold`
 - Available `MockModel` attributes: `agents`, `survival_cost`, `policy`, `population`, `brackets`, `start_up_required`, `patron`, `total`, `comparison_results`, `datacollector`
 - Available `MockAgent` attributes: `wealth`, `W`, `I`, `model`, `unique_id`, `bracket`, `bracket_history`, `party_elite`, `mobility`
+- Note: `last_paid_uids` exists on the real `WealthAgent` but **not** on `MockAgent` — do not reference it in AI-generated policy code
 
 ---
 
@@ -252,6 +265,127 @@ The simulation supports **live code injection** without restarting the server:
 
 ---
 
+## Frontend UI (`docs/landing.html`)
+
+The simulator UI has a single permanent view: the **3D scene (person view)**. There is no chart view and no view toggle — Chart.js has been removed entirely.
+
+### Sidebar
+
+The sidebar is collapsible (toggle button at top-left) and contains:
+
+1. **Hidden compatibility elements** (`display:none`) — kept so `app.js` doesn't crash on DOM lookups:
+   - `#view-select`, `#population-input`, `#patron-toggle`
+   - `#status-text`, `#backend-status`, `#status-policy`, `#status-population`
+
+2. **Live stat cards** — two stacked cards updated every simulation step via `_updateStatCards()`:
+   - **Population Wealth** (`#stat-total-wealth`) — formatted as `$X`, `$XK`, `$XM`, or `$XB`
+   - **Gini** (`#stat-gini`) — shown to 3 decimal places
+   - Each card has an info `?` button that opens the `#info-modal`
+
+3. **Model Configuration** accordion (collapsible, open by default):
+   - Policy `<select id="policy-select">` — options: econophysics, fascism, communism, capitalism, comparison
+
+4. **Model Controls** accordion (collapsible, open by default):
+   - Initialize Model, Single Step, Start Continuous, Stop Continuous, Open Policy Editor
+
+### Info Modal (`#info-modal`)
+- Shared modal used by both stat card `?` buttons and the policy info button
+- Content defined in the inline `infoContent` object (keys: `econophysics`, `fascism`, `communism`, `capitalism`, `comparison`, `totalWealth`, `gini`, `wealthDistribution`, `mobility`, `population`)
+- Can optionally show a confirm/cancel footer (used for initialization confirmation)
+
+---
+
+## Frontend Logic (`docs/app.js`)
+
+### `InequalitySimulator` class
+
+**Constructor** (`new InequalitySimulator()`):
+- Binds DOM elements
+- Calls `initializeCharts()` — now safely no-ops (all canvas elements removed; guarded with `null` checks)
+- Calls `setView('person')` — immediately switches to person view and lazily initialises the `SceneManager`
+- Polls `/api/status` on startup
+
+**Key methods:**
+
+| Method | Description |
+|---|---|
+| `setView(view)` | Sets `this.currentView`; on first call to `'person'` creates the `SceneManager` via `_initScene()` |
+| `_initScene()` | Creates `new SceneManager(canvas)`, calls `.init()`, then `.loadCharacter()` |
+| `toggleCameraMode()` | Toggles `SceneManager` between `'third'` and `'first'` person camera |
+| `initializeCharts()` | No-op (all chart canvases removed); guarded so missing elements are safely skipped |
+| `_updateStatCards()` | Fetches `/data/gini` and `/data/total-wealth` in parallel; updates `#stat-gini` and `#stat-total-wealth`; handles both single-policy and comparison modes |
+| `refreshCharts(incremental)` | Always calls `_updateStatCards()` + `updatePersonView()` in parallel (chart update paths are dead code) |
+| `updatePersonView()` | Fetches `/data/mobility` and `/data/exchanges`; calls `sceneManager.update(...)` with bracket, wealth, percentile, and crowd data |
+| `initializeModel()` | POST `/api/initialize`, then calls `refreshCharts(false)` |
+| `stepModel()` | POST `/api/step`, then `refreshCharts(true)` |
+| `startContinuousRun()` / `stopContinuousRun()` | Loop calling `stepModel()` with a configurable interval |
+
+**`refreshCharts()` flow:**
+```
+refreshCharts()
+  ├── _updateStatCards()        ← always runs; updates sidebar stat cards
+  └── updatePersonView()        ← always runs (currentView is always 'person')
+        ├── GET /api/data/mobility
+        ├── GET /api/data/exchanges
+        └── sceneManager.update({ bracket, wealth, percentile, crowdData })
+```
+
+---
+
+## 3D Scene Visualisation (`docs/scene.js`)
+
+The simulator renders an animated 3D character whose behaviour reflects the user's agent in the simulation.
+
+### `SceneManager`
+
+**Constructor:** `new SceneManager(canvas)` — takes the `<canvas id="scene">` element.
+
+**Public API (called by `app.js`):**
+| Method | Description |
+|---|---|
+| `init()` | Build renderer, scene, lights, ground plane |
+| `loadCharacter(charIndex)` | Load the chosen GLB from `CHAR_POOL` and pull animation clips |
+| `playAnimation(name)` | Crossfade to `idle` / `walking` / `sad` / `celebrating` |
+| `setCameraMode(mode)` | GSAP tween between `'third'` and `'first'` person cameras |
+| `buildCrowd()` | Clone 18 agents in a ring (used in first-person view) |
+| `updateCrowd(crowdData)` | Drive each crowd member's animation from bracket/wealth data |
+| `update({ bracket, wealth, percentile, crowdData })` | Called every simulation step; updates main character animation and crowd |
+
+**Bracket → animation mapping:**
+| Wealth bracket | Animation |
+|---|---|
+| `Lower` | `sad` |
+| `Middle` | `walking` |
+| `Upper` | `celebrating` |
+
+**Camera modes:**
+- **Third-person** (`CAM_3P`): position `(0, 5.5, −7.0)`, target `(0, 0.5, 2.5)` — elevated behind player; crowd visible ahead
+- **First-person** (`CAM_1P`): position `(0, 1.7, 0.1)`, target `(0, 1.7, −10)` — immersive crowd view
+
+**Character pool (`CHAR_POOL`):** 10 Mixamo-sourced GLB characters — Ben, Leonard, Jody, Joe, James, Megan, Remy, Suzie, Kate, Louise. Users select their character via a picker UI backed by `CHAR_META` (name + emoji).
+
+**Crowd system:** 18 clones (`CROWD_SIZE`) arranged on a circle of radius 5 metres (`CROWD_RADIUS`). Each clone plays an animation driven by its bracket from `crowdData`.
+
+**GLB workflow:** Mixamo → FBX with skin → Blender import → export GLB (glTF Binary, Apply Modifiers on, Compression off). Animation clips are loaded separately per-action GLB and merged onto the character's mixer.
+
+### Key animation bug fixes (for reference)
+- **SkinnedMesh binding root**: `mixer.clipAction(clip)` must be called with **no second argument**. Passing `targetMesh` as the binding root causes PropertyBinding to search only the mesh's children for bones; Mixamo bones are siblings under the armature, not children of the mesh → characters explode to pieces.
+- **SkeletonUtils.retargetClip bypass**: `THREE.SkeletonUtils.retargetClip` (r134) emits `.bones[name].quaternion` format tracks that require a SkinnedMesh as mixer root. Since the mixer is rooted at a Group, `SkeletonUtils.retargetClip` is bypassed entirely in favour of `_retargetClipForObject()`, which writes plain `boneName.quaternion` tracks resolvable via scene-graph walk.
+
+---
+
+## GLB Debug Tool (`docs/glb-debug.html`)
+
+A standalone developer page (not served through Flask) used to validate character GLB exports.
+
+- Loads all 11 characters (`ben`, `brian`, `james`, `jody`, `joe`, `kate`, `leonard`, `louise`, `megan`, `remy`, `suzie`) in individual Three.js viewports
+- Detects export problems: missing skinned meshes, missing bones, no animation clips, invalid/extreme bounding-box height
+- Renders a summary dashboard: models loaded, failed loads, suspicious exports, average height
+- Provides toolbar buttons: Reload all, Toggle axes helpers, Toggle skeletons, Log diagnostics to console
+- Uses Three.js r134 (CDN) with `GLTFLoader` and `OrbitControls`
+
+---
+
 ## Key Design Decisions & Gotchas
 
 1. **Mesa 3.0**: `model.agents` is an `AgentSet`, not a list. It supports iteration and `.select()` but NOT indexing. Use `agent.model.random.choice(agent.model.agents)` for random selection.
@@ -261,3 +395,5 @@ The simulation supports **live code injection** without restarting the server:
 5. **Bracket thresholds** are recalculated each step from the live distribution — they are not fixed values.
 6. **Comparison mode**: `current_model.comparison_models[policy]` holds the actual `WealthModel` instance per policy. `current_model.agents` is empty in comparison mode.
 7. **Innovation Pareto distribution**: `np.random.pareto(2.5)` with values clamped to [1, 3]. Lower `alpha` = heavier tail = more inequality in innovation potential.
+8. **Chart.js removed**: The frontend no longer loads Chart.js. `initializeCharts()` in `app.js` is a no-op guarded with `null` checks on canvas elements. Do not add chart canvas elements to the HTML without updating `app.js` accordingly.
+9. **Person view is permanent**: `setView('person')` is called on construction and there is no UI to switch away. `refreshCharts()` always runs the person-view code path.

@@ -54,6 +54,13 @@
 
   <div id="blocklyDiv"></div>
 
+  <!-- Policy info panel: shown below toolbar, updates when active policy changes -->
+  <div id="policy-info-bar" style="background:#2c3e50;color:#ecf0f1;padding:8px 16px;font-size:0.88em;display:flex;align-items:center;gap:14px;border-top:1px solid #34495e;">
+    <span>Active policy: <strong id="active-policy-label">Econophysics</strong></span>
+    <a id="policy-anim-link" href="/explain/econophysics" target="_blank" style="color:#3498db;text-decoration:none;font-weight:bold;">▶ View Animation</a>
+    <span id="policy-description" style="color:#bdc3c7;">The base econophysics exchange model.</span>
+  </div>
+
   <div id="chat-container">
     <div id="chat-header" onclick="toggleChat()">🤖 Policy Assistant</div>
     <div id="chat-body"></div>
@@ -64,25 +71,37 @@
   </div>
 
   <xml xmlns="https://developers.google.com/blockly/xml" id="toolbox" style="display: none">
-    <category name="Agent Logic" colour="120">
-      <block type="agent_step_def"></block>
-      <block type="update_history"></block>
-      <block type="calc_agent_metrics"></block>
-    </category>
-    <category name="Policies" colour="0" id="policyCategory">
-      <block type="execute_wealth_exchange"></block>
-      <block type="execute_fascism"></block>
-      <block type="execute_capitalism"></block>
-      <block type="execute_communism"></block>
-    </category>
-    <category name="Control" colour="210">
-      <block type="check_policy"></block>
-      <block type="check_elite"></block>
-    </category>
-    <category name="Custom" colour="290" id="customCategory"></category>
+    <block type="execute_wealth_exchange"></block>
+    <block type="execute_fascism"></block>
+    <block type="execute_capitalism"></block>
+    <block type="execute_communism"></block>
   </xml>
 
   <script>
+    // ── Policy metadata: label, description and animation link per policy key ──
+    var POLICY_META = {
+      'econophysics': {
+        label: 'Econophysics',
+        description: 'Base model — survival/thrive wealth exchange with no political overlay.',
+        animUrl: '/explain/econophysics'
+      },
+      'fascism': {
+        label: 'Fascism',
+        description: 'Party elites tax all other agents every step.',
+        animUrl: '/explain/fascism'
+      },
+      'capitalism': {
+        label: 'Capitalism',
+        description: 'Agents with enough capital invest in innovation for a temporary pay boost.',
+        animUrl: '/explain/capitalism'
+      },
+      'communism': {
+        label: 'Communism',
+        description: 'All wealth is redistributed equally after each step.',
+        animUrl: '/explain/communism'
+      }
+    };
+
     var workspace = Blockly.inject('blocklyDiv', {
       toolbox: document.getElementById('toolbox'),
       scrollbars: true,
@@ -90,75 +109,336 @@
       theme: Blockly.Themes.Dark
     });
 
+    // Default workspace: policy_root with econophysics in the Active Policy slot,
+    // followed by the standard agent step logic.
     var startXml = `
     <xml>
-        <block type="agent_step_def" x="20" y="20">
+      <block type="policy_root" x="20" y="20">
+        <statement name="POLICY">
+          <block type="execute_wealth_exchange"></block>
+        </statement>
+        <statement name="STEPS">
+          <block type="agent_step_def">
             <statement name="STEPS">
-                <block type="update_history">
-                    <next>
-                        <block type="check_policy">
-                            <field name="OPTION">fascism</field>
-                            <statement name="DO">
-                                <block type="execute_fascism">
-                                    <next>
-                                        <block type="check_elite">
-                                            <statement name="DO">
-                                                <block type="execute_wealth_exchange"></block>
-                                            </statement>
-                                        </block>
-                                    </next>
-                                </block>
-                            </statement>
-                            <next>
-                                <block type="check_policy">
-                                    <field name="OPTION">capitalism</field>
-                                    <statement name="DO">
-                                        <block type="execute_capitalism">
-                                            <next>
-                                                <block type="execute_wealth_exchange"></block>
-                                            </next>
-                                        </block>
-                                    </statement>
-                                    <next>
-                                        <block type="check_policy">
-                                            <field name="OPTION">communism</field>
-                                            <statement name="DO">
-                                                <block type="execute_communism">
-                                                    <next>
-                                                        <block type="execute_wealth_exchange"></block>
-                                                    </next>
-                                                </block>
-                                            </statement>
-                                            <next>
-                                                <block type="check_policy">
-                                                    <field name="OPTION">econophysics</field>
-                                                    <statement name="DO">
-                                                        <block type="execute_wealth_exchange"></block>
-                                                    </statement>
-                                                    <next>
-                                                        <block type="calc_agent_metrics"></block>
-                                                    </next>
-                                                </block>
-                                            </next>
-                                        </block>
-                                    </next>
-                                </block>
-                            </next>
-                        </block>
-                    </next>
-                </block>
+              <block type="update_history">
+                <next>
+                  <block type="calc_agent_metrics"></block>
+                </next>
+              </block>
             </statement>
-        </block>
+          </block>
+        </statement>
+      </block>
     </xml>`;
-    
+
     Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(startXml), workspace);
 
+    // Lock only the structural scaffold blocks so users can only swap the
+    // policy block slotted in the Active Policy input.
+    function lockBaseBlocks() {
+      var baseTypes = ['policy_root', 'agent_step_def', 'update_history', 'calc_agent_metrics'];
+      workspace.getAllBlocks().forEach(function(block) {
+        if (baseTypes.indexOf(block.type) !== -1) {
+          block.setDeletable(false);
+          block.setMovable(false);
+        }
+      });
+    }
+    lockBaseBlocks();
+
+    // ── Active-policy detection ───────────────────────────────────────────────
+    // Walk the workspace looking for the policy_root block and read which
+    // policy block is slotted into its POLICY input.
+    function getActivePolicyKey() {
+      var blocks = workspace.getBlocksByType('policy_root', false);
+      if (!blocks.length) return null;
+      var root = blocks[0];
+      // The first child block in the POLICY statement input
+      var policyInput = root.getInputTargetBlock('POLICY');
+      if (!policyInput) return null;
+      var type = policyInput.type;
+      // Map block type → policy key
+      var typeMap = {
+        'execute_wealth_exchange': 'econophysics',
+        'execute_fascism':         'fascism',
+        'execute_capitalism':      'capitalism',
+        'execute_communism':       'communism'
+      };
+      // For custom/AI-generated blocks, use the block type as the key
+      return typeMap[type] || type;
+    }
+
+    // Return the human-readable label for a policy block type.
+    // Reads message0 from the block definition so custom blocks show their own label.
+    function getPolicyLabel(blockType) {
+      var meta = POLICY_META[blockType];
+      if (meta) return meta.label;
+      // For custom blocks, try to read the message from the block definition
+      var def = Blockly.Blocks[blockType];
+      if (def && def.json && def.json.message0) return def.json.message0;
+      // Fallback: prettify the type string
+      return blockType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    }
+
+    // Update the info bar whenever the active policy might have changed.
+    function refreshInfoBar() {
+      var key    = getActivePolicyKey();
+      var meta   = key ? (POLICY_META[key] || {}) : {};
+      var label  = key ? getPolicyLabel(key) : '—';
+      var desc   = meta.description || (key ? 'Custom policy: ' + key : 'No policy block in slot.');
+      var url    = meta.animUrl || null;
+
+      document.getElementById('active-policy-label').textContent = label;
+      document.getElementById('policy-description').textContent  = desc;
+
+      var link = document.getElementById('policy-anim-link');
+      if (url) {
+        link.href    = url;
+        link.style.display = '';
+      } else {
+        link.style.display = 'none';
+      }
+    }
+
+    // Listen for any workspace change and refresh the bar.
+    workspace.addChangeListener(function(e) {
+      if (e.type === Blockly.Events.BLOCK_MOVE   ||
+          e.type === Blockly.Events.BLOCK_CREATE  ||
+          e.type === Blockly.Events.BLOCK_DELETE  ||
+          e.type === Blockly.Events.BLOCK_CHANGE) {
+        refreshInfoBar();
+      }
+    });
+
+    // ── Auto-snap / cleanup policy blocks ───────────────────────────────
+    // Rule: there must be exactly one policy block in the POLICY slot and no
+    // extra floating policy blocks on the canvas.
+
+    var builtinPolicyTypes = [
+      'execute_wealth_exchange','execute_fascism',
+      'execute_capitalism','execute_communism'
+    ];
+
+    var policyRecencyCounter = 1;
+    var policyRecencyById = Object.create(null);
+
+    function markPolicyRecency(block) {
+      if (!block) return;
+      policyRecencyById[block.id] = ++policyRecencyCounter;
+    }
+
+    function getPolicyRecency(block) {
+      return block ? (policyRecencyById[block.id] || 0) : 0;
+    }
+
+    function initializePolicyRecency() {
+      workspace.getAllBlocks(false).forEach(function(b) {
+        if (isPolicyBlock(b)) markPolicyRecency(b);
+      });
+    }
+
+    function isFloatingPolicyBlock(b, rootId, skipId) {
+      if (b.id === rootId) return false;
+      if (skipId && b.id === skipId) return false;
+      if (b.getParent()) return false; // connected to something
+      var conn = b.previousConnection;
+      if (!conn) return false;
+      var checks = (conn.getCheck && conn.getCheck()) || [];
+      return checks.indexOf('Policy') !== -1 || builtinPolicyTypes.indexOf(b.type) !== -1;
+    }
+
+    function isPolicyBlock(block) {
+      if (!block) return false;
+      if (builtinPolicyTypes.indexOf(block.type) !== -1) return true;
+      var conn = block.previousConnection;
+      var checks = (conn && conn.getCheck && conn.getCheck()) || [];
+      return checks.indexOf('Policy') !== -1;
+    }
+
+    function enforceSinglePolicyBlock(preferBlockId, forceDisposeFloating) {
+      try {
+        var roots = workspace.getBlocksByType('policy_root', false);
+        if (!roots.length) return;
+        var root = roots[0];
+        var policyInput = root.getInput('POLICY');
+        if (!policyInput || !policyInput.connection) return;
+
+        var current = root.getInputTargetBlock('POLICY');
+
+        // Find all floating policy blocks (excluding whatever is in the slot)
+        var floating = workspace.getAllBlocks(false).filter(function(b) {
+          return isFloatingPolicyBlock(b, root.id, current ? current.id : null);
+        });
+
+        if (current && forceDisposeFloating) {
+          // Read all policy blocks currently stacked in the POLICY slot.
+          var stack = [];
+          var cursor = current;
+          while (cursor && isPolicyBlock(cursor)) {
+            stack.push(cursor);
+            cursor = cursor.getNextBlock();
+          }
+
+          if (stack.length > 1) {
+            // Keep the most recently dropped policy block.
+            var winner = stack[0];
+            stack.forEach(function(b) {
+              if (getPolicyRecency(b) > getPolicyRecency(winner)) winner = b;
+            });
+
+            if (winner.id !== current.id) {
+              if (winner.getParent()) winner.unplug(false);
+              if (current.getParent()) current.unplug(false);
+              if (policyInput.connection && winner.previousConnection) {
+                policyInput.connection.connect(winner.previousConnection);
+              }
+              current = winner;
+            }
+
+            stack.forEach(function(b) {
+              if (b.id !== winner.id) b.dispose(false);
+            });
+          }
+
+          // Remove any remaining stacked policies beneath the winner.
+          var stacked = current.getNextBlock();
+          while (stacked) {
+            var next = stacked.getNextBlock();
+            stacked.dispose(false);
+            stacked = next;
+          }
+
+          // A new policy was explicitly dropped into the slot, so dispose any
+          // leftover floating policies (typically the previously active one).
+          floating.forEach(function(b) { b.dispose(false); });
+          return;
+        }
+
+        if (current || !floating.length) return;
+
+        // Keep a single floating policy and auto-snap it back if the slot is empty.
+        var toSnap = null;
+        if (preferBlockId) {
+          toSnap = floating.find(function(b) { return b.id === preferBlockId; }) || null;
+        }
+        if (!toSnap) {
+          toSnap = floating.reduce(function(best, b) {
+            if (!best) return b;
+            return getPolicyRecency(b) > getPolicyRecency(best) ? b : best;
+          }, null);
+        }
+
+        floating.forEach(function(b) {
+          if (b.id !== toSnap.id) b.dispose(false);
+        });
+
+        if (toSnap.previousConnection && policyInput.connection && !policyInput.connection.targetConnection) {
+          policyInput.connection.connect(toSnap.previousConnection);
+        }
+      } catch (err) {
+        console.error('Policy cleanup error:', err);
+      }
+    }
+
+    var policyCleanupTimer = null;
+    function schedulePolicyCleanup(preferBlockId, forceDisposeFloating) {
+      if (policyCleanupTimer) clearTimeout(policyCleanupTimer);
+      policyCleanupTimer = setTimeout(function() {
+        enforceSinglePolicyBlock(preferBlockId, !!forceDisposeFloating);
+        refreshInfoBar();
+        lockBaseBlocks();
+      }, 0);
+    }
+
+    workspace.addChangeListener(function(e) {
+      if (e.type !== Blockly.Events.BLOCK_CREATE &&
+          e.type !== Blockly.Events.BLOCK_MOVE &&
+          e.type !== Blockly.Events.BLOCK_DELETE) {
+        return;
+      }
+
+      var roots = workspace.getBlocksByType('policy_root', false);
+      if (!roots.length) return;
+      var root = roots[0];
+
+      function isInPolicyStack(block) {
+        if (!block) return false;
+        var top = root.getInputTargetBlock('POLICY');
+        while (top) {
+          if (top.id === block.id) return true;
+          top = top.getNextBlock();
+        }
+        return false;
+      }
+
+      if (e.type === Blockly.Events.BLOCK_CREATE) {
+        var createdBlock = workspace.getBlockById(e.blockId);
+        if (isPolicyBlock(createdBlock)) markPolicyRecency(createdBlock);
+        return;
+      }
+
+      if (e.type === Blockly.Events.BLOCK_MOVE) {
+        var movedBlock = workspace.getBlockById(e.blockId);
+        if (!isPolicyBlock(movedBlock)) return;
+
+        // If a policy block was just ejected from the POLICY slot (old one
+        // pushed out when new one connects), dispose it immediately so it
+        // never visibly floats on the canvas.
+        var ejectedFromPolicySlot = e.oldParentId === root.id && e.oldInputName === 'POLICY';
+        if (ejectedFromPolicySlot && !movedBlock.getParent()) {
+          movedBlock.dispose(false);
+          refreshInfoBar();
+          return;
+        }
+
+        // Only force replacement when a policy block is actually dropped into
+        // policy_root.POLICY. This avoids deleting the block while the user is
+        // just clicking/starting to drag from the toolbox.
+        var droppedIntoPolicySlot = e.newParentId === root.id && e.newInputName === 'POLICY';
+        var droppedWithinPolicyStack = isInPolicyStack(movedBlock);
+
+        if (droppedIntoPolicySlot || droppedWithinPolicyStack) {
+          markPolicyRecency(movedBlock);
+          // Immediately dispose any other policy blocks in the slot (the old
+          // policy) so the user never sees two blocks stacked together.
+          var cursor = root.getInputTargetBlock('POLICY');
+          while (cursor) {
+            var next = cursor.getNextBlock();
+            if (cursor.id !== movedBlock.id && isPolicyBlock(cursor)) {
+              cursor.dispose(false);
+            }
+            cursor = next;
+          }
+          // Also dispose any floating policy blocks left on the canvas.
+          workspace.getAllBlocks(false).forEach(function(b) {
+            if (b.id !== movedBlock.id && isFloatingPolicyBlock(b, root.id, movedBlock.id)) {
+              b.dispose(false);
+            }
+          });
+          refreshInfoBar();
+          lockBaseBlocks();
+        }
+        return;
+      }
+
+      if (e.type === Blockly.Events.BLOCK_DELETE) {
+        // If the active policy block gets deleted somehow, recover by snapping a
+        // remaining floating policy (if any) back into the slot.
+        schedulePolicyCleanup(null, false);
+      }
+    });
+
+    initializePolicyRecency();
+
+    refreshInfoBar();
+
+    // ── Chat ─────────────────────────────────────────────────────────────────
     function toggleChat() {
-        var body = document.getElementById('chat-body');
+        var body  = document.getElementById('chat-body');
         var input = document.getElementById('chat-input-area');
-        var display = body.style.display === 'none' ? 'block' : 'none';
-        body.style.display = display;
-        input.style.display = display;
+        var show  = body.style.display === 'none' ? 'block' : 'none';
+        body.style.display  = show;
+        input.style.display = show;
     }
 
     function addMessage(text, sender, isHtml = false) {
@@ -166,7 +446,6 @@
         div.className = 'msg ' + sender;
         if (isHtml) div.innerHTML = text;
         else div.innerText = text;
-        
         document.getElementById('chat-body').appendChild(div);
         var chatBody = document.getElementById('chat-body');
         chatBody.scrollTop = chatBody.scrollHeight;
@@ -175,12 +454,11 @@
 
     function sendMessage() {
         var input = document.getElementById('chat-input');
-        var msg = input.value;
+        var msg   = input.value;
         if (!msg) return;
         addMessage(msg, 'user');
         input.value = '';
 
-        // loading message
         var loadingMsg = addMessage("Generating and testing code... please wait...", 'bot loading');
 
         fetch('/api/chat', {
@@ -190,57 +468,66 @@
         })
         .then(res => res.json())
         .then(data => {
-            // Remove loading message
             loadingMsg.remove();
+            if (data.error) { addMessage("❌ Error: " + data.error, 'bot'); return; }
 
-            if (data.error) {
-                addMessage("❌ Error: " + data.error, 'bot');
-                return;
-            }
-            
-            var text = data.response;
-            var cleanText = text.replace(/```json\n?|```/g, "").trim();
-
+            var cleanText = data.response.replace(/```json\n?|```/g, "").trim();
             try {
                 var payload = JSON.parse(cleanText);
                 if (Array.isArray(payload)) payload = payload[0];
 
-                // 1. Display the Gemini Step-by-Step Description
-                if (payload.description) {
-                    addMessage("<b>Policy Description:</b><br>" + payload.description, 'bot', true);
-                }
-
                 if (typeof payload.block_json === 'string') payload.block_json = JSON.parse(payload.block_json);
-                
-                // Fix Statement
+
                 if (payload.block_json.output !== undefined) {
                     delete payload.block_json.output;
                     payload.block_json.previousStatement = null;
                     payload.block_json.nextStatement = null;
                 }
 
+                // Debug: log the full payload so description issues can be checked
+                console.log('AI payload received:', payload);
+
                 if (payload.block_json && payload.python_code) {
-                    // 2. FIXED: Consolidate the status log and the install prompt
                     var statusText = payload.status_message || "✅ Code verified and ready to install.";
-                    var combinedHtml = "<div class='status-log'>" + statusText + "</div><br><b>Ready to Install?</b>";
-                    
-                    addMessage(combinedHtml, 'bot', true);
-                    
+
+                    // Description — rendered prominently ABOVE the status log.
+                    var rawDesc = typeof payload.description === 'string'
+                        ? payload.description.trim() : '';
+                    var descHtml;
+                    if (rawDesc) {
+                        var steps = rawDesc
+                            .split(/\d+\.\s+/)
+                            .map(function(s) { return s.trim(); })
+                            .filter(function(s) { return s.length > 0; });
+                        if (steps.length > 1) {
+                            descHtml = '<div style="background:#e8f5e9;border-left:4px solid #27ae60;padding:8px 10px;margin-bottom:8px;border-radius:4px;">'
+                                + '<b style="color:#1a7a3c">📝 How this policy works:</b>'
+                                + '<ol style="margin:6px 0 0 16px;padding:0;color:#333">'
+                                + steps.map(function(s) { return '<li style="margin-bottom:4px">' + s + '</li>'; }).join('')
+                                + '</ol></div>';
+                        } else {
+                            descHtml = '<div style="background:#e8f5e9;border-left:4px solid #27ae60;padding:8px 10px;margin-bottom:8px;border-radius:4px;">'
+                                + '<b style="color:#1a7a3c">📝 How this policy works:</b><br>'
+                                + '<span style="color:#333">' + rawDesc + '</span></div>';
+                        }
+                    } else {
+                        descHtml = '<div style="background:#fff3cd;border-left:4px solid #f39c12;padding:6px 10px;margin-bottom:8px;border-radius:4px;color:#856404">'
+                            + '⚠️ The AI did not provide a plain-English description for this policy.</div>';
+                    }
+
+                    addMessage(descHtml + "<div class='status-log'>" + statusText + "</div><br><b>Ready to Install?</b>", 'bot', true);
+
                     var btn = document.createElement('button');
-                    btn.className = 'install-btn';
-                    var blockType = payload.block_json.type || "custom_policy";
-                    btn.innerText = "Install Block: " + blockType;
-                    
-                    btn.onclick = function() { 
-                        installPolicy(payload); 
-                        btn.disabled = true; 
-                        btn.innerText = "Installed (Look in Custom)"; 
+                    btn.className  = 'install-btn';
+                    var blockType  = payload.block_json.type || "custom_policy";
+                    btn.innerText  = "Install Block: " + blockType;
+                    btn.onclick    = function() {
+                        installPolicy(payload);
+                        btn.disabled  = true;
+                        btn.innerText = "Installed (Look in Policies)";
                     };
                     document.getElementById('chat-body').appendChild(btn);
-                    
-                    // Scroll to bottom
-                    var chatBody = document.getElementById('chat-body');
-                    chatBody.scrollTop = chatBody.scrollHeight;
+                    document.getElementById('chat-body').scrollTop = 9999;
                 } else {
                     addMessage("I could not generate a valid block configuration.", 'bot');
                 }
@@ -250,63 +537,74 @@
             }
         })
         .catch(e => {
-            if(loadingMsg) loadingMsg.remove();
-            console.error(e);
+            if (loadingMsg) loadingMsg.remove();
             addMessage("Connection Error", 'bot');
         });
     }
 
     function installPolicy(payload) {
         if (payload.block_json.output !== undefined) {
-             delete payload.block_json.output;
-             payload.block_json.previousStatement = null;
-             payload.block_json.nextStatement = null;
+            delete payload.block_json.output;
+            payload.block_json.previousStatement = null;
+            payload.block_json.nextStatement = null;
         }
+
+        // Custom policy blocks should be droppable into the policy_root slot
+        payload.block_json.previousStatement = "Policy";
+        payload.block_json.nextStatement     = null;
 
         if (payload.block_json.previousStatement === null) {
             payload.block_generator = payload.block_generator.replace(
-                /return\s*\[\s*([\s\S]*?)\s*,[\s\S]*?\];?/g, 
+                /return\s*\[\s*([\s\S]*?)\s*,[\s\S]*?\];?/g,
                 "return $1 + '\\n';"
             );
         }
 
         if (payload.block_generator.includes("Blockly.Python['")) {
             payload.block_generator = payload.block_generator.replace(
-                /Blockly\.Python\['/g, 
+                /Blockly\.Python\['/g,
                 "Blockly.Python.forBlock['"
             );
         }
 
+        // Prepend the ACTIVE_POLICY sentinel so the frontend can detect this
+        // block's name when it's slotted into the policy_root.
+        var blockType = payload.block_json.type || 'custom_policy';
+        var sentinel  = "# ACTIVE_POLICY: " + blockType + "\\n";
+        payload.block_generator = payload.block_generator.replace(
+            /return\s*(['"`])/,
+            "return '" + sentinel + "' + $1"
+        );
+
         Blockly.defineBlocksWithJsonArray([payload.block_json]);
         try {
             eval(payload.block_generator);
-            
+
             var p1 = fetch('/api/add_custom_policy', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ code: payload.python_code })
             });
-
             var p2 = fetch('/api/save_block_definition', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ 
-                    block_json: payload.block_json,
-                    block_generator: payload.block_generator 
+                body: JSON.stringify({
+                    block_json:      payload.block_json,
+                    block_generator: payload.block_generator
                 })
             });
 
             Promise.all([p1, p2]).then(() => {
+                // Add the new block to the flat toolbox so it appears alongside
+                // the built-in policy blocks and can be dropped into policy_root.
                 var toolbox = document.getElementById('toolbox');
-                var customCat = document.getElementById('customCategory');
-                
-                if (!document.querySelector(`block[type="${payload.block_json.type}"]`)) {
+                if (!toolbox.querySelector(`block[type="${blockType}"]`)) {
                     var newBlock = document.createElement('block');
-                    newBlock.setAttribute('type', payload.block_json.type);
-                    customCat.appendChild(newBlock);
+                    newBlock.setAttribute('type', blockType);
+                    toolbox.appendChild(newBlock);
                     workspace.updateToolbox(toolbox);
                 }
-                alert("Block Installed Successfully!\n\nCheck the 'Custom' category.");
+                alert("Block Installed!\n\nDrag it from the toolbox into the Active Policy slot of the Policy Root block.");
             }).catch(e => alert("Error saving block to server: " + e));
 
         } catch(e) {
@@ -315,19 +613,35 @@
         }
     }
 
+    // ── Save / Reset ─────────────────────────────────────────────────────────
     function generateAndSave() {
         try {
             var code = Blockly.Python.workspaceToCode(workspace);
+
+            // Extract the active policy key from the ACTIVE_POLICY sentinel comment
+            // emitted by whichever policy execute_* block is in the policy_root slot.
+            var policyMatch = code.match(/# ACTIVE_POLICY:\s*(\S+)/);
+            var activePolicy = policyMatch ? policyMatch[1] : 'econophysics';
+
             document.getElementById('saveStatus').innerText = "Sending...";
-            fetch('/api/update_code', {
+
+            var p1 = fetch('/api/update_code', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ code: code })
-            })
-            .then(res => res.json())
-            .then(data => {
-                document.getElementById('saveStatus').innerText = "Saved!";
-                setTimeout(() => document.getElementById('saveStatus').innerText = "", 2000);
+            });
+
+            // Notify the backend (and thus the frontend) which policy is active.
+            var p2 = fetch('/api/set_active_policy', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ policy: activePolicy })
+            });
+
+            Promise.all([p1, p2]).then(() => {
+                document.getElementById('saveStatus').innerText = "Saved! Policy → " + activePolicy;
+                refreshInfoBar();
+                setTimeout(() => document.getElementById('saveStatus').innerText = "", 3000);
             });
         } catch (e) {
             console.error("Generator Error:", e);
@@ -336,13 +650,10 @@
     }
 
     function resetLogic() {
-        if(!confirm("Reset logic?")) return;
+        if (!confirm("Reset logic to default Econophysics?")) return;
         fetch('/api/reset_code', { method: 'POST' })
         .then(res => res.json())
-        .then(data => {
-            alert("Reset Complete");
-            location.reload(); 
-        });
+        .then(() => { alert("Reset Complete"); location.reload(); });
     }
   </script>
 </body>

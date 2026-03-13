@@ -201,6 +201,43 @@ def get_total_wealth_data():
                 total_data = []
             return json_response({'current': total_data})
 
+@app.route('/api/data/exchanges', methods=['GET'])
+def get_exchanges():
+    """Return payer→receiver agent index pairs from the most recent step.
+
+    Each entry in 'edges' is [from_idx, to_idx] where the indices correspond
+    to the ordering of agents in /api/data/mobility and /api/data/wealth-distribution.
+    The frontend uses these to animate money particles flying between crowd members.
+    """
+    global current_model
+    if current_model is None:
+        return jsonify({'error': 'Model not initialized'}), 400
+
+    with model_lock:
+        # Only meaningful for single-policy modes where WealthExchange runs
+        if current_model.policy == "comparison":
+            return json_response({'edges': []})
+
+        agent_list = list(current_model.agents)
+        if not agent_list:
+            return json_response({'edges': []})
+
+        # Build uid → positional-index map (same order as /data/mobility)
+        uid_to_idx = {a.unique_id: i for i, a in enumerate(agent_list)}
+
+        edges = []
+        for i, agent in enumerate(agent_list):
+            uids = getattr(agent, 'last_paid_uids', [])
+            amounts = getattr(agent, 'last_paid_amounts', [])
+            for k, uid in enumerate(uids):
+                j = uid_to_idx.get(uid, -1)
+                if j != -1 and j != i:
+                    amt = amounts[k] if k < len(amounts) else 0
+                    edges.append([i, j, amt])
+
+        return json_response({'edges': edges})
+
+
 @app.route('/api/status', methods=['GET'])
 def get_status():
     """Get current model status"""
