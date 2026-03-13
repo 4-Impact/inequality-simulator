@@ -11,51 +11,20 @@ class InequalitySimulator {
         const isOnRender = hostname.includes('onrender.com');
         
         if (isGitHubPages) {
-            // Try real backend first, fallback to mock if needed
             this.apiBase = 'https://inequality-simulator.onrender.com/api';
-            this.useMockBackend = false;
         } else if (isOnRender) {
             // When deployed on Render, use relative paths (same domain)
             this.apiBase = '/api';
-            this.useMockBackend = false;
         } else if (isLocalhost) {
-            // Local development on laptop
+            // Local development
             this.apiBase = 'http://localhost:5000/api';
-            this.useMockBackend = false;
         } else {
-            // Local network access (for mobile testing)
-            // Use HTTPS if the page is served over HTTPS, otherwise HTTP
+            // Local network access (e.g. mobile testing)
             const apiProtocol = protocol === 'https:' ? 'https:' : 'http:';
             this.apiBase = `${apiProtocol}//192.168.50.4:5000/api`;
-            this.useMockBackend = false;
         }
-        
-        // Initialize mock backend if needed
-        if (this.useMockBackend) {
-            this.initializeMockBackend();
-            console.log('Using mock backend for GitHub Pages');
-            // Update UI to show mock backend status
-            setTimeout(() => {
-                const backendStatus = document.getElementById('backend-status');
-                if (backendStatus) {
-                    backendStatus.textContent = 'Mock (Browser-based)';
-                    backendStatus.style.color = '#ff9800'; // Orange color for mock
-                }
-            }, 100);
-        } else {
-            console.log('Using real backend at:', this.apiBase);
-            // Update UI to show real backend attempt
-            setTimeout(() => {
-                const backendStatus = document.getElementById('backend-status');
-                if (backendStatus) {
-                    backendStatus.textContent = 'Connecting...';
-                    backendStatus.style.color = '#2196f3'; // Blue for connecting
-                }
-            }, 100);
-            
-            // Test the backend connection immediately
-            this.testBackendConnection();
-        }
+
+        this.testBackendConnection();
         
         this.charts = {};
         this.isInitialized = false;
@@ -66,15 +35,19 @@ class InequalitySimulator {
         this.agentPositions = {}; // Store fixed x positions for agents
         this.previousClassCounts = null; // Store previous class distribution for flow calculation
     this.currentView = 'population';
-    this.youIndex = null; // random agent index for person view
+    this.youIndex = null; // which agent index represents "you"
+    this.selectedCharacterIdx = null;
+    this._charPickerResolver = null;
+    this._sceneReadyPromise = null;
+    this._resolveSceneReady = null;
     const urlParams = new URLSearchParams(window.location.search);
     this.youSeed = urlParams.get('seed') || localStorage.getItem('sim_you_seed') || (Math.random().toString(36).slice(2));
     localStorage.setItem('sim_you_seed', this.youSeed);
-    this.cachedRichestIdx = null;
-    this.cachedPoorestIdx = null;
-    this.cachedRichestWealth = null;
-    this.cachedPoorestWealth = null;
-        
+
+    // 3D SceneManager — created lazily the first time person view is opened
+    this.sceneManager     = null;
+    this.sceneCameraMode  = 'third';  // 'third' | 'first'
+
         this.initializeCharts();
         this.updateStatus();
         
@@ -97,45 +70,225 @@ class InequalitySimulator {
             this.setView('person');
         }
 
-        // Person carousel controls
-        const pLeft = document.getElementById('p-arrow-left');
-        const pRight = document.getElementById('p-arrow-right');
-        this.personOrder = ['card-richest','card-you','card-poorest'];
-        this.personIndex = 1;
-        const updatePHUD = () => {
-            const titles = ['Wealthiest','You','Poorest'];
-            const hud = document.getElementById('person-hud');
-            if (hud) hud.textContent = `${titles[this.personIndex]} (${this.personIndex+1}/3)`;
-        };
-        const showP = (i) => {
-            const cards = this.personOrder.map(id=>document.getElementById(id));
-            this.personIndex = (i+cards.length)%cards.length;
-            cards.forEach(el => el && el.classList.add('active'));
-            updatePHUD();
-        };
-        if (pLeft && pRight) {
-            pLeft.addEventListener('click', ()=> showP(this.personIndex-1));
-            pRight.addEventListener('click', ()=> showP(this.personIndex+1));
-        }
-        document.addEventListener('DOMContentLoaded', ()=> showP(1));
+        this._updateCameraModeLabel();
+
     }
+
+    /**
+     * setView(view)
+     * Toggle between 'person' (3D scene) and 'population' (charts).
+     * On the first switch to person view the SceneManager is created
+     * and GLB assets are loaded from /assets/.
+     */
     setView(view) {
         this.currentView = view;
-        const personView = document.getElementById('person-view');
+        const personView    = document.getElementById('person-view');
         const chartCarousel = document.getElementById('chart-carousel');
+
         if (view === 'person') {
             if (chartCarousel) chartCarousel.style.display = 'none';
-            if (personView) personView.style.display = 'block';
-            // pick a random agent index once per model init
-            if (this.youIndex == null && this.isInitialized) {
-                const popText = document.getElementById('status-population')?.textContent;
-                const pop = parseInt(popText || '0');
-                if (pop > 0) this.youIndex = Math.floor(Math.random() * pop);
-            }
-            this.updatePersonView();
+            if (personView)    personView.style.display    = 'block';
+
+            // Initialise Three.js scene the very first time
+            if (!this.sceneManager) this._initScene();
+
+            // If a model is already running, push data to scene immediately
+            if (this.isInitialized) this.updatePersonView();
+
         } else {
-            if (personView) personView.style.display = 'none';
+            if (personView)    personView.style.display    = 'none';
             if (chartCarousel) chartCarousel.style.display = 'block';
+        }
+    }
+
+    /**
+     * _initScene()
+     * Creates the SceneManager, initialises the Three.js renderer on the
+     * #scene canvas, and begins loading the four Mixamo GLB files.
+     * Called once, lazily, on the first switch to person view.
+     */
+    _initScene() {
+        const canvas = document.getElementById('scene');
+        if (!canvas || typeof SceneManager === 'undefined') {
+            console.warn('[app.js] SceneManager or #scene canvas not found.');
+            return;
+        }
+
+        this._sceneReadyPromise = new Promise((resolve) => {
+            this._resolveSceneReady = resolve;
+        });
+
+        this.sceneManager = new SceneManager(canvas);
+        this.sceneManager.init();
+
+        // One frame after init, force the renderer to match the actual canvas
+        // dimensions — guards against the edge case where the browser hadn't
+        // finished painting when init() read clientWidth/clientHeight.
+        requestAnimationFrame(() => {
+            if (this.sceneManager) this.sceneManager._onResize();
+        });
+
+        this.sceneManager.loadCharacter(() => {
+            // All GLBs ready — populate the character picker first so the grid
+            // is fully built before the spinner disappears (prevents a blank-
+            // picker flash). Then fade out the loading spinner.
+            this._showCharPicker();
+            const loadingEl = document.getElementById('scene-loading');
+            if (loadingEl) {
+                gsap.to(loadingEl, {
+                    opacity: 0, duration: 0.4,
+                    onComplete: () => {
+                        loadingEl.style.display = 'none';
+                    }
+                });
+            }
+            this._resolveSceneReady?.();
+            this._resolveSceneReady = null;
+            console.log('[app.js] Scene ready.');
+            if (this.isInitialized) this.updatePersonView();
+        });
+    }
+
+    /**
+     * awaitSceneReady()
+     * Ensures the 3D scene and character assets are fully loaded.
+     *
+     * @returns {Promise<void>}
+     */
+    async awaitSceneReady() {
+        if (!this.sceneManager) {
+            this._initScene();
+        }
+
+        if (this.sceneManager?.isLoaded) {
+            return;
+        }
+
+        if (this._sceneReadyPromise) {
+            await this._sceneReadyPromise;
+        }
+    }
+
+    /**
+     * _showCharPicker()
+     * Populates and fades in the character selection overlay.
+     * If there is only one character the picker is skipped automatically.
+     */
+    _showCharPicker(options = {}) {
+        // If only one character is loaded, skip the picker
+        if (!this.sceneManager || this.sceneManager.characterPool.length <= 1) {
+            // Still apply index 0 so mixer is bound correctly
+            this.selectedCharacterIdx = 0;
+            this.sceneManager && this.sceneManager.setPlayerCharacter(0);
+            return;
+        }
+
+        const picker = document.getElementById('char-picker');
+        if (!picker) return;
+        const { title, subtitle } = options;
+
+        const titleEl = picker.querySelector('#char-picker-title');
+        const subEl = picker.querySelector('#char-picker-sub');
+        if (titleEl && title) titleEl.textContent = title;
+        if (subEl && subtitle) subEl.textContent = subtitle;
+
+        // Build one card per character dynamically from CHAR_META
+        const grid = picker.querySelector('#char-picker-grid');
+        grid.innerHTML = '';
+        const pool = typeof CHAR_META !== 'undefined' ? CHAR_META : [];
+        const count = this.sceneManager.characterPool.length;
+        for (let i = 0; i < count; i++) {
+            const meta = pool[i] || { name: `Character ${i + 1}`, emoji: '🧑' };
+            const card = document.createElement('button');
+            card.className = 'char-card';
+            const portraitSrc = this.sceneManager.getCharacterPortraitDataUrl?.(i, 160);
+            card.innerHTML = `${portraitSrc
+                ? `<img class="char-portrait" src="${portraitSrc}" alt="${meta.name}" />`
+                : `<span class="char-name">${meta.emoji}</span>`}
+                              <span class="char-name">${meta.name}</span>`;
+            card.addEventListener('click', () => this.selectCharacter(i));
+            grid.appendChild(card);
+        }
+
+        picker.style.display = 'flex';
+        gsap.fromTo(picker, { opacity: 0 }, { opacity: 1, duration: 0.4 });
+    }
+
+    /**
+     * selectCharacter(idx)
+     * Called when a card in the character picker is clicked.
+     */
+    selectCharacter(idx) {
+        this.selectedCharacterIdx = idx;
+        if (this.sceneManager) this.sceneManager.setPlayerCharacter(idx);
+
+        const picker = document.getElementById('char-picker');
+        if (picker) {
+            gsap.to(picker, {
+                opacity: 0, duration: 0.3,
+                onComplete: () => {
+                    picker.style.display = 'none';
+                    const resolver = this._charPickerResolver;
+                    this._charPickerResolver = null;
+                    resolver?.(idx);
+                }
+            });
+        } else {
+            const resolver = this._charPickerResolver;
+            this._charPickerResolver = null;
+            resolver?.(idx);
+        }
+    }
+
+    /**
+     * promptCharacterSelection()
+     * Shows the picker as part of initialization and resolves with the chosen index.
+     *
+     * @returns {Promise<number>}
+     */
+    promptCharacterSelection() {
+        if (!this.sceneManager || !this.sceneManager.isLoaded) {
+            return Promise.resolve(this.selectedCharacterIdx ?? 0);
+        }
+
+        return new Promise((resolve) => {
+            this._charPickerResolver = resolve;
+            this._showCharPicker({
+                title: 'Choose your character',
+                subtitle: 'Pick who you want to follow before initializing the simulator',
+            });
+        });
+    }
+
+    /**
+     * toggleCameraMode()
+     * Called by the camera toggle button in landing.html.
+     * Flips between third-person (behind character) and first-person
+     * (eye level, crowd visible).
+     */
+    toggleCameraMode() {
+        this.sceneCameraMode = (this.sceneCameraMode === 'third') ? 'first' : 'third';
+        if (this.sceneManager) {
+            this.sceneManager.setCameraMode(this.sceneCameraMode);
+        }
+        // Shrink wealth display slightly in first-person mode
+        const overlay = document.getElementById('scene-overlay');
+        if (overlay) {
+            overlay.classList.toggle('fp-hud', this.sceneCameraMode === 'first');
+        }
+        this._updateCameraModeLabel();
+    }
+
+    /**
+     * _updateCameraModeLabel()
+     * Reflects the currently active camera mode in the bottom-right button.
+     */
+    _updateCameraModeLabel() {
+        const label = document.getElementById('cam-mode-label');
+        if (label) {
+            label.innerHTML = this.sceneCameraMode === 'third'
+                ? '&#128694; Third Person'
+                : '&#128065; First Person';
         }
     }
     
@@ -184,6 +337,9 @@ class InequalitySimulator {
             clearInterval(this.continuousRunInterval);
             this.continuousRunInterval = null;
             this.updateButtonStates();
+            // Clear any in-flight money particles so they don't keep
+            // animating after the simulation has stopped.
+            if (this.sceneManager) this.sceneManager.clearParticles();
         }
     }
     
@@ -193,14 +349,12 @@ class InequalitySimulator {
         this.agentPositions = {}; // Reset agent positions
         this.previousClassCounts = null; // Reset previous class counts for flow calculation
     this.youIndex = null; // reset chosen person on re-init
-    // keep youSeed stable across inits
-    this.cachedRichestIdx = null;
-    this.cachedPoorestIdx = null;
+    // youSeed stays stable so the same virtual person is tracked across re-inits
         
         // Reset line charts (Gini and Total Wealth)
         this.charts.gini.data.labels = [];
         this.charts.gini.data.datasets = [{
-            label: 'Gini Coefficient',
+            label: 'Inequality Metric',
             data: [],
             borderColor: 'rgba(54, 162, 235, 1)',
             backgroundColor: 'rgba(54, 162, 235, 0.1)',
@@ -228,188 +382,30 @@ class InequalitySimulator {
     }
 
     async apiCall(endpoint, method = 'GET', data = null) {
-        // For GitHub Pages, try real backend first, then fallback to mock
-        if (this.useMockBackend) {
-            return await this.mockApiCall(endpoint, method, data);
-        }
-        
         try {
-            console.log(`API Call: ${method} ${this.apiBase}${endpoint}`);
-            
             const options = {
                 method: method,
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                mode: 'cors'  // Explicitly set CORS mode
+                headers: { 'Content-Type': 'application/json' },
+                mode: 'cors',
             };
-            
-            if (data) {
-                options.body = JSON.stringify(data);
-                console.log('Request data:', data);
-            }
+
+            if (data) options.body = JSON.stringify(data);
 
             const response = await fetch(`${this.apiBase}${endpoint}`, options);
-            
-            console.log(`Response status: ${response.status} ${response.statusText}`);
-            
+
             if (!response.ok) {
                 const errorText = await response.text();
-                console.error('Response error text:', errorText);
                 throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
             }
-            
-            const result = await response.json();
-            console.log('Response data:', result);
-            return result;
+
+            return await response.json();
         } catch (error) {
-            console.error('API call failed:', error);
-            console.error('Error details:', {
-                endpoint: endpoint,
-                method: method,
-                apiBase: this.apiBase,
-                error: error.message
-            });
-            
-            // If on GitHub Pages and real API fails, fallback to mock
-            const hostname = window.location.hostname;
-            if (hostname.includes('github.io') && !this.useMockBackend) {
-                console.warn('Real backend failed, falling back to mock backend:', error.message);
-                this.useMockBackend = true;
-                this.initializeMockBackend();
-                // Update UI to show fallback status
-                const backendStatus = document.getElementById('backend-status');
-                if (backendStatus) {
-                    backendStatus.textContent = 'Mock (Fallback)';
-                    backendStatus.style.color = '#ff5722'; // Red-orange for fallback
-                }
-                return await this.mockApiCall(endpoint, method, data);
-            }
+            console.error(`API call failed [${method} ${endpoint}]:`, error.message);
             this.showError(`API Error: ${error.message}`);
             throw error;
         }
     }
 
-    initializeMockBackend() {
-        // Initialize mock data storage
-        this.mockData = {
-            model: null,
-            step: 0,
-            giniHistory: [],
-            totalWealthHistory: [],
-            initialized: false
-        };
-    }
-
-    async mockApiCall(endpoint, method = 'GET', data = null) {
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        switch (endpoint) {
-            case '/status':
-                return {
-                    initialized: this.mockData.initialized,
-                    policy: this.mockData.model?.policy || null,
-                    population: this.mockData.model?.population || null,
-                    step_count: this.mockData.step
-                };
-                
-            case '/initialize':
-                if (method === 'POST') {
-                    this.mockData.model = {
-                        policy: data.policy || 'econophysics',
-                        population: data.population || 200,
-                        start_up_required: data.start_up_required || 1
-                    };
-                    this.mockData.initialized = true;
-                    this.mockData.step = 0;
-                    this.mockData.giniHistory = [];
-                    this.mockData.totalWealthHistory = [];
-                    return { status: 'success', message: 'Model initialized' };
-                }
-                break;
-                
-            case '/step':
-                if (method === 'POST' && this.mockData.initialized) {
-                    this.mockData.step += 1;
-                    // Generate mock gini and total wealth data
-                    const gini = 0.3 + Math.random() * 0.4; // Random gini between 0.3-0.7
-                    const totalWealth = 1000 + this.mockData.step * 10 + Math.random() * 100;
-                    this.mockData.giniHistory.push(gini);
-                    this.mockData.totalWealthHistory.push(totalWealth);
-                    return { status: 'success' };
-                }
-                break;
-                
-            case '/data/wealth-distribution':
-                if (this.mockData.initialized) {
-                    // Generate mock wealth distribution
-                    const population = this.mockData.model.population;
-                    const wealthData = [];
-                    for (let i = 0; i < population; i++) {
-                        // Generate wealth with power law distribution (realistic inequality)
-                        const wealth = Math.pow(Math.random(), 2) * 1000;
-                        wealthData.push(wealth);
-                    }
-                    return { current: wealthData };
-                }
-                break;
-                
-            case '/data/mobility':
-                if (this.mockData.initialized) {
-                    const population = this.mockData.model.population;
-                    const classes = ['Lower', 'Middle', 'Upper'];
-                    
-                    if (this.mockData.model.policy === 'comparison') {
-                        // Return comparison data structure
-                        const policies = ['econophysics', 'fascism', 'communism', 'capitalism'];
-                        const comparisonData = {};
-                        
-                        policies.forEach(policy => {
-                            const policyData = [];
-                            for (let i = 0; i < Math.floor(population / policies.length); i++) {
-                                policyData.push({
-                                    bracket: classes[Math.floor(Math.random() * 3)],
-                                    mobility: Math.random(), // 0 to 1 for Bartholomew ratio
-                                    wealth: Math.pow(Math.random(), 2) * 1000,
-                                    policy: policy
-                                });
-                            }
-                            comparisonData[policy] = policyData;
-                        });
-                        
-                        return comparisonData;
-                    } else {
-                        // Single policy data structure
-                        const mobilityData = [];
-                        for (let i = 0; i < population; i++) {
-                            mobilityData.push({
-                                bracket: classes[Math.floor(Math.random() * 3)],
-                                mobility: Math.random(), // 0 to 1 for Bartholomew ratio
-                                wealth: Math.pow(Math.random(), 2) * 1000,
-                                policy: this.mockData.model.policy
-                            });
-                        }
-                        return mobilityData;
-                    }
-                }
-                break;
-                
-            case '/data/gini':
-                if (this.mockData.initialized) {
-                    return { current: this.mockData.giniHistory };
-                }
-                break;
-                
-            case '/data/total-wealth':
-                if (this.mockData.initialized) {
-                    return { current: this.mockData.totalWealthHistory };
-                }
-                break;
-        }
-        
-        throw new Error(`Mock API endpoint not implemented: ${endpoint}`);
-    }
     showError(message) {
         const errorDiv = document.getElementById('error-message');
         errorDiv.textContent = message;
@@ -425,16 +421,7 @@ class InequalitySimulator {
             document.getElementById('status-text').textContent = status.initialized ? 'Ready' : 'Not Initialized';
             document.getElementById('status-policy').textContent = status.policy || '-';
             document.getElementById('status-population').textContent = status.population || '-';
-            
-            // Update backend status to show successful connection
-            if (!this.useMockBackend) {
-                const backendStatus = document.getElementById('backend-status');
-                if (backendStatus) {
-                    backendStatus.textContent = 'Real API (Connected)';
-                    backendStatus.style.color = '#4caf50'; // Green for connected
-                }
-            }
-            
+
             this.isInitialized = status.initialized;
             this.updateButtonStates();
             // keep person view updated if visible
@@ -468,11 +455,15 @@ class InequalitySimulator {
     }
 
     initializeCharts() {
-        // Initialize all charts with empty data
-        this.charts.wealth = this.createHistogramChart('wealth-chart');
-        this.charts.mobility = this.createScatterChart('mobility-chart');
-        this.charts.gini = this.createLineChart('gini-chart');
-        this.charts.totalWealth = this.createLineChart('total-wealth-chart');
+        // Initialize charts only if their canvas elements exist in the DOM
+        if (document.getElementById('wealth-chart'))
+            this.charts.wealth = this.createHistogramChart('wealth-chart');
+        if (document.getElementById('mobility-chart'))
+            this.charts.mobility = this.createScatterChart('mobility-chart');
+        if (document.getElementById('gini-chart'))
+            this.charts.gini = this.createLineChart('gini-chart');
+        if (document.getElementById('total-wealth-chart'))
+            this.charts.totalWealth = this.createLineChart('total-wealth-chart');
     }
 
     createHistogramChart(canvasId, title) {
@@ -514,57 +505,6 @@ class InequalitySimulator {
             }
         });
     }
-    /*
-    createScatterChart(canvasId, title) {
-        const ctx = document.getElementById(canvasId).getContext('2d');
-        return new Chart(ctx, {
-            type: 'scatter',
-            data: {
-                datasets: []
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    title: {
-                        display: false, // Disabled since title is now in HTML
-                        text: title,
-                        color: '#e0e0e0'
-                    },
-                    legend: {
-                        display: true,
-                        labels: { color: '#e0e0e0' }
-                    }
-                },
-                scales: {
-                    x: {
-                        title: {
-                            display: true,
-                            text: 'Position',
-                            color: '#e0e0e0'
-                        },
-                        ticks: { color: '#e0e0e0' },
-                        grid: { color: 'rgba(224, 224, 224, 0.1)' }
-                    },
-                    y: {
-                        title: {
-                            display: true,
-                            text: 'Economic Class',
-                            color: '#e0e0e0'
-                        },
-                        ticks: { 
-                            color: '#e0e0e0',
-                            callback: function(value) {
-                                const labels = ['Lower', 'Middle', 'Upper'];
-                                return labels[value] || value;
-                            }
-                        },
-                        grid: { color: 'rgba(224, 224, 224, 0.1)' }
-                    }
-                }
-            }
-        });
-    }
-    */
     createLineChart(canvasId, title) {
         const ctx = document.getElementById(canvasId).getContext('2d');
         return new Chart(ctx, {
@@ -1184,6 +1124,16 @@ class InequalitySimulator {
                 this.charts.gini.data.datasets = datasets;
             }
             
+            // Update sidebar stat card
+            const giniStatEl = document.getElementById('stat-gini');
+            if (giniStatEl) {
+                const ds = this.charts.gini.data.datasets[0];
+                if (ds?.data?.length) {
+                    const v = ds.data[ds.data.length - 1];
+                    giniStatEl.textContent = (typeof v === 'number' && isFinite(v)) ? v.toFixed(3) : '—';
+                }
+            }
+
             this.charts.gini.update('none'); // 'none' mode for faster updates
         } catch (error) {
             console.error('Error updating Gini chart:', error);
@@ -1244,218 +1194,242 @@ class InequalitySimulator {
                 this.charts.totalWealth.data.datasets = datasets;
             }
             
+            // Update sidebar stat card
+            const twStatEl = document.getElementById('stat-total-wealth');
+            if (twStatEl) {
+                const ds = this.charts.totalWealth.data.datasets[0];
+                if (ds?.data?.length) {
+                    const v = ds.data[ds.data.length - 1];
+                    if (typeof v === 'number' && isFinite(v)) {
+                        const a = Math.abs(v);
+                        twStatEl.textContent =
+                            a >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` :
+                            a >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` :
+                            a >= 1e3 ? `$${(v / 1e3).toFixed(1)}K` :
+                            `$${Math.round(v)}`;
+                    } else {
+                        twStatEl.textContent = '—';
+                    }
+                }
+            }
+
             this.charts.totalWealth.update('none'); // 'none' mode for faster updates
         } catch (error) {
             console.error('Error updating total wealth chart:', error);
         }
     }
 
-    async refreshCharts(incremental = false) {
-        if (!this.isInitialized) return;
-        
-        if (!incremental) {
-            document.getElementById('status-text').textContent = 'Updating charts...';
-        }
-        
+    async _updateStatCards() {
         try {
-            if (this.currentView === 'person') {
-                await this.updatePersonView();
-            } else {
-                if (incremental) {
-                    await Promise.all([
-                        this.updateWealthChart(),
-                        this.updateMobilityChart(),
-                        this.updateGiniChart(true),
-                        this.updateTotalWealthChart(true)
-                    ]);
+            const [giniData, wealthData] = await Promise.all([
+                this.apiCall('/data/gini'),
+                this.apiCall('/data/total-wealth'),
+            ]);
+
+            const giniEl = document.getElementById('stat-gini');
+            if (giniEl) {
+                let gini = null;
+                if (Array.isArray(giniData.current) && giniData.current.length) {
+                    gini = giniData.current[giniData.current.length - 1];
                 } else {
-                    await Promise.all([
-                        this.updateWealthChart(),
-                        this.updateMobilityChart(),
-                        this.updateGiniChart(false),
-                        this.updateTotalWealthChart(false)
-                    ]);
+                    const vals = Object.values(giniData).filter(Array.isArray);
+                    if (vals.length) {
+                        const lasts = vals.map(a => a[a.length - 1]).filter(v => isFinite(v));
+                        if (lasts.length) gini = lasts.reduce((a, b) => a + b, 0) / lasts.length;
+                    }
+                }
+                giniEl.textContent = (typeof gini === 'number' && isFinite(gini)) ? gini.toFixed(3) : '\u2014';
+            }
+
+            const twEl = document.getElementById('stat-total-wealth');
+            if (twEl) {
+                let total = null;
+                if (Array.isArray(wealthData.current) && wealthData.current.length) {
+                    total = wealthData.current[wealthData.current.length - 1];
+                } else {
+                    const vals = Object.values(wealthData).filter(Array.isArray);
+                    if (vals.length) {
+                        const lasts = vals.map(a => a[a.length - 1]).filter(v => isFinite(v));
+                        if (lasts.length) total = lasts.reduce((a, b) => a + b, 0) / lasts.length;
+                    }
+                }
+                if (typeof total === 'number' && isFinite(total)) {
+                    const a = Math.abs(total);
+                    twEl.textContent =
+                        a >= 1e9 ? `$${(total / 1e9).toFixed(1)}B` :
+                        a >= 1e6 ? `$${(total / 1e6).toFixed(1)}M` :
+                        a >= 1e3 ? `$${(total / 1e3).toFixed(1)}K` :
+                        `$${Math.round(total)}`;
+                } else {
+                    twEl.textContent = '\u2014';
                 }
             }
-            
-            if (!incremental) {
-                document.getElementById('status-text').textContent = 'Ready';
-            }
-        } catch (error) {
-            if (!incremental) {
-                document.getElementById('status-text').textContent = 'Error updating charts';
-            }
-        }
+        } catch (_) { /* stat cards are non-critical */ }
     }
 
+    async refreshCharts(incremental = false) {
+        if (!this.isInitialized) return;
+
+        try {
+            // Stat cards always update regardless of which view is active
+            const tasks = [this._updateStatCards()];
+
+            if (this.currentView === 'person') {
+                tasks.push(this.updatePersonView());
+            } else {
+                tasks.push(
+                    this.updateWealthChart(),
+                    this.updateMobilityChart(),
+                    this.updateGiniChart(incremental),
+                    this.updateTotalWealthChart(incremental),
+                );
+            }
+
+            await Promise.all(tasks);
+        } catch (_) { /* individual methods handle their own errors */ }
+    }
+
+    /**
+     * updatePersonView()
+     * ------------------------------------------------------------------
+     * Called every simulation step when the person view is active.
+     *
+     * Fetches wealth + mobility data, finds "you" in the population,
+     * then:
+     *   1. Updates the HUD overlays (#you-bracket-badge, etc.)
+     *   2. Drives the 3D character via sceneManager.update()
+     */
     async updatePersonView() {
         try {
             const status = await this.apiCall('/status');
             if (!status.initialized) return;
-            // Fetch wealth distribution to compute richest/poorest and select 'you'
-            const wealthData = await this.apiCall('/data/wealth-distribution');
-            let wealths = [];
-            let policies = [];
-            let isComparison = !wealthData.current && wealthData && typeof wealthData === 'object';
-            if (wealthData.current && Array.isArray(wealthData.current)) {
-                wealths = wealthData.current;
-                // For single policy mode, policy is uniform
-                policies = Array(wealths.length).fill(status.policy || '—');
+
+            // Fetch both endpoints in parallel for speed
+            const [wealthData, mobData, exchangeData] = await Promise.all([
+                this.apiCall('/data/wealth-distribution'),
+                this.apiCall('/data/mobility'),
+                this.apiCall('/data/exchanges').catch(() => ({ edges: [] })),
+            ]);
+
+            // ── Flatten agent arrays ──────────────────────────────
+            let wealths  = [];  // number[]  — one entry per agent
+            let brackets = [];  // string[]  — 'Lower' | 'Middle' | 'Upper'
+
+            const isComparison = !wealthData.current;
+
+            if (!isComparison && Array.isArray(wealthData.current)) {
+                wealths  = wealthData.current;
+                const mobArr = Array.isArray(mobData)
+                    ? mobData
+                    : (Array.isArray(mobData?.current) ? mobData.current : []);
+                brackets = mobArr.map(a => a.bracket || 'Middle');
+                // Pad if lengths differ
+                while (brackets.length < wealths.length) brackets.push('Middle');
+
             } else if (isComparison) {
-                // Build arrays aligned per agent: wealths[] and policies[]
                 const order = ['econophysics', 'fascism', 'communism', 'capitalism'];
                 order.forEach(policy => {
-                    const arr = wealthData[policy] || [];
-                    arr.forEach(v => {
-                        wealths.push(v);
-                        policies.push(policy);
-                    });
+                    (wealthData[policy] || []).forEach(v  => wealths.push(v));
+                    (mobData[policy]    || []).forEach(a  => brackets.push(a.bracket || 'Middle'));
                 });
-                // If mobility endpoint returns richer objects per agent, prefer that mapping
-                try {
-                    const mob = await this.apiCall('/data/mobility');
-                    // mob is object {policy: [ {wealth, policy,...} ]}
-                    const wealths2 = [];
-                    const policies2 = [];
-                    order.forEach(policy => {
-                        const list = mob[policy] || [];
-                        list.forEach(a => {
-                            if (typeof a.wealth === 'number') {
-                                wealths2.push(a.wealth);
-                                policies2.push(a.policy || policy);
-                            }
-                        });
-                    });
-                    if (wealths2.length) { wealths = wealths2; policies = policies2; }
-                } catch(_) { /* fallback already set */ }
             }
+
             if (!wealths.length) return;
 
-            // Determine richest and poorest
-            // Stable tie-breaking: if multiple with same wealth, keep previous index if still matches
-            let richest = Math.max(...wealths);
-            let poorest = Math.min(...wealths);
-            let candidateRichestIdx = wealths.indexOf(richest);
-            let candidatePoorestIdx = wealths.indexOf(poorest);
-            let richestIdx = candidateRichestIdx;
-            let poorestIdx = candidatePoorestIdx;
-            if (this.cachedRichestWealth === richest && this.cachedRichestIdx != null && wealths[this.cachedRichestIdx] === richest) {
-                richestIdx = this.cachedRichestIdx;
-            }
-            if (this.cachedPoorestWealth === poorest && this.cachedPoorestIdx != null && wealths[this.cachedPoorestIdx] === poorest) {
-                poorestIdx = this.cachedPoorestIdx;
-            }
-
-            // pick 'you' index within bounds
+            // ── Pick "you" index (stable across steps) ────────────
             if (this.youIndex == null || this.youIndex >= wealths.length) {
                 this.youIndex = Math.floor(Math.random() * wealths.length);
             }
-            const youWealth = wealths[this.youIndex];
 
-            // Update DOM
+            const youWealth  = wealths[this.youIndex];
+            const youBracket = brackets[this.youIndex] || 'Middle';
+
+            // ── Percentile: what % of agents earn less than you ───
+            const below      = wealths.filter(w => w < youWealth).length;
+            const percentile = Math.round((below / wealths.length) * 100);
+            const pctLabel   = percentile >= 50
+                ? `Top ${100 - percentile}%`
+                : `Bottom ${percentile + 1}%`;
+
+            // ── Update HUD overlays ───────────────────────────────
             const fmt = (n) => {
                 if (typeof n !== 'number' || !isFinite(n)) return '—';
-                const parts = (val) => {
-                    if (Math.abs(val) >= 1e9) return (val/1e9).toFixed(1) + ' B';
-                    if (Math.abs(val) >= 1e6) return (val/1e6).toFixed(1) + ' M';
-                    if (Math.abs(val) >= 1e3) return (val/1e3).toFixed(1) + ' K';
-                    return val.toFixed(0);
-                };
-                return `$ ${parts(n)}`;
-            };
-            const policy = status.policy || '—';
-            const richestEl = document.getElementById('richest-wealth');
-            const poorestEl = document.getElementById('poorest-wealth');
-            const youEl = document.getElementById('you-wealth');
-            const youPolicyEl = document.getElementById('you-policy');
-            const richestPolicyEl = document.getElementById('richest-policy');
-            const poorestPolicyEl = document.getElementById('poorest-policy');
-            if (richestEl) richestEl.textContent = fmt(richest);
-            if (poorestEl) poorestEl.textContent = fmt(poorest);
-            if (youEl) youEl.textContent = fmt(youWealth);
-            // Policies per person
-            if (Array.isArray(policies) && policies.length === wealths.length) {
-                if (youPolicyEl) youPolicyEl.textContent = policies[this.youIndex] || policy;
-                if (richestPolicyEl) richestPolicyEl.textContent = policies[richestIdx] || policy;
-                if (poorestPolicyEl) poorestPolicyEl.textContent = policies[poorestIdx] || policy;
-            } else {
-                if (youPolicyEl) youPolicyEl.textContent = policy;
-                if (richestPolicyEl) richestPolicyEl.textContent = policy;
-                if (poorestPolicyEl) poorestPolicyEl.textContent = policy;
-            }
-
-            // Render avatars with mood based on absolute wealth relative to distribution
-            const renderAvatar = (elId, wealth, seed, mood) => {
-                const el = document.getElementById(elId);
-                if (!el) return;
-                
-                // Clear previous avatar
-                el.innerHTML = '';
-                
-                // Use the successor to the 'avataaars' style
-                const style = 'personas';
-                const encodedSeed = encodeURIComponent(seed || 'seed');
-
-                // Determine mouth parameter based on mood
-                let mouthParam = 'smirk';
-                if (mood === 'happy') mouthParam = 'smile';
-                else if (mood === 'sad') mouthParam = 'frown';
-                
-                // Eyes parameter remains 'default'
-                const eyesParam = 'open';
-
-                // Construct the updated URL for DiceBear API v8.x
-                const url = `https://api.dicebear.com/9.x/${style}/svg?seed=${encodedSeed}&mouth=${mouthParam}&eyes=${eyesParam}`;
-                console.log('Avatar URL:', url);
-                const img = document.createElement('img');
-                img.alt = 'avatar';
-                img.loading = 'lazy';
-                img.src = url;
-                el.appendChild(img);
-            };
-            
-            // compute mood by brackets, mirroring utilities.py
-            const sortedWealth = [...wealths].sort((a, b) => a - b);
-            const lowerBracket = sortedWealth[Math.floor(sortedWealth.length * 0.33)] || 0;
-            const upperBracket = sortedWealth[Math.floor(sortedWealth.length * 0.67)] || 0;
-            
-            const moodOf = (w) => {
-                if (w >= upperBracket) return 'happy';
-                if (w < lowerBracket) return 'sad';
-                return 'neutral';
+                if (Math.abs(n) >= 1e9) return `$ ${(n/1e9).toFixed(1)} B`;
+                if (Math.abs(n) >= 1e6) return `$ ${(n/1e6).toFixed(1)} M`;
+                if (Math.abs(n) >= 1e3) return `$ ${(n/1e3).toFixed(1)} K`;
+                return `$ ${n.toFixed(0)}`;
             };
 
+            const badgeEl  = document.getElementById('you-bracket-badge');
+            const wealthEl = document.getElementById('you-wealth-display');
+            const pctEl    = document.getElementById('you-percentile');
 
-            // update 'you' avatar with stable seed always
-            renderAvatar('you-avatar', youWealth, this.youSeed, moodOf(youWealth));
+            if (badgeEl) {
+                badgeEl.textContent = youBracket;
+                // Replace any existing bracket class with the current one
+                badgeEl.classList.remove('Lower', 'Middle', 'Upper');
+                badgeEl.classList.add(youBracket);
+            }
 
-            // only update richest/poorest avatars if identity changed
-            const richestChanged = this.cachedRichestIdx !== richestIdx;
-            const poorestChanged = this.cachedPoorestIdx !== poorestIdx;
-            if (richestChanged) {
-                this.cachedRichestIdx = richestIdx;
-                this.cachedRichestWealth = richest;
-                const rSeed = `richest-${richestIdx}`;
-                renderAvatar('richest-avatar', richest, rSeed, moodOf(richest));
+            // Animate wealth counter with GSAP instead of a hard set
+            if (wealthEl) {
+                const from = parseFloat(wealthEl.dataset.raw || '0');
+                const obj  = { val: from };
+                gsap.to(obj, {
+                    val: youWealth, duration: 0.6, ease: 'power1.out',
+                    onUpdate: () => { wealthEl.textContent = fmt(obj.val); }
+                });
+                wealthEl.dataset.raw = youWealth;
             }
-            if (poorestChanged) {
-                this.cachedPoorestIdx = poorestIdx;
-                this.cachedPoorestWealth = poorest;
-                const pSeed = `poorest-${poorestIdx}`;
-                renderAvatar('poorest-avatar', poorest, pSeed, moodOf(poorest));
+            if (pctEl) pctEl.textContent = pctLabel;
+
+            // ── Drive 3D character ────────────────────────────────
+            if (this.sceneManager && this.sceneManager.isLoaded) {
+                // Pass up to 99 crowd brackets (exclude "you")
+                const crowdAgentIndices = wealths
+                    .map((_, i) => i)
+                    .filter((i) => i !== this.youIndex)
+                    .slice(0, 99);
+
+                const crowdBrackets = crowdAgentIndices.map(i => brackets[i] || 'Middle');
+
+                // Per-crowd member wealth and percentile label for overlay labels
+                const crowdWealth = crowdAgentIndices.map(i => wealths[i] ?? 0);
+                const crowdPctLabel = crowdAgentIndices.map(i => {
+                    const w = wealths[i] ?? 0;
+                    const below = wealths.filter(x => x < w).length;
+                    const p = Math.round((below / wealths.length) * 100);
+                    return p >= 50 ? `Top ${100 - p}%` : `Bottom ${p + 1}%`;
+                });
+
+                this.sceneManager.update({
+                    bracket:           youBracket,
+                    wealth:            youWealth,
+                    percentile,
+                    youPctLabel:       pctLabel,
+                    crowdBrackets,
+                    crowdAgentIndices,
+                    crowdWealth,
+                    crowdPctLabel,
+                    exchanges:         exchangeData?.edges ?? [],
+                    youAgentIdx:       this.youIndex,
+                });
             }
+
         } catch (e) {
-            console.warn('Person view update failed', e);
+            console.warn('[updatePersonView] failed:', e);
         }
     }
 }
 
 // Global instance
+
 let simulator;
 
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', function() {
     simulator = new InequalitySimulator();
+    window.simulator = simulator;  
 });
 
 // Global functions for button clicks

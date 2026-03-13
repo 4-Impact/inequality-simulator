@@ -18,6 +18,11 @@ class WealthAgent(mesa.Agent):
         self.W = proportion
         self.I = innovation
         self.innovating = False
+        # Exchange tracking: UIDs this agent paid money to this step.
+        # Cleared at the start of each step's WealthExchange call so the
+        # /api/data/exchanges endpoint always reflects the latest step.
+        self.last_paid_uids = []
+        self.last_paid_amounts = []
 
 
     def step(self):

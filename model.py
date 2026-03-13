@@ -24,9 +24,9 @@ def compute_mobility(model):
        
 class WealthModel(mesa.Model): 
     
-    def __init__(self, policy="econophysics", population=200, start_up_required=1, patron=False, seed=42):
+    def __init__(self, policy="econophysics", population=100, start_up_required=1, patron=False, rng=42):
         
-        super().__init__(seed=seed)
+        super().__init__(rng=rng)
         self.policy = policy
         self.population = population
         self.party_elite = None

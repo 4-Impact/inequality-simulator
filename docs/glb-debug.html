@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GLB Debug Viewer</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #0f172a;
+            --panel: #111827;
+            --panel-2: #1f2937;
+            --text: #e5e7eb;
+            --muted: #94a3b8;
+            --ok: #22c55e;
+            --warn: #f59e0b;
+            --bad: #ef4444;
+            --line: #334155;
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: linear-gradient(180deg, #020617 0%, var(--bg) 100%);
+            color: var(--text);
+        }
+
+        header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--line);
+            position: sticky;
+            top: 0;
+            backdrop-filter: blur(10px);
+            background: rgba(2, 6, 23, 0.9);
+            z-index: 10;
+        }
+
+        h1 {
+            margin: 0 0 8px;
+            font-size: 28px;
+        }
+
+        p, li {
+            color: var(--muted);
+            line-height: 1.45;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 14px;
+        }
+
+        button {
+            border: 1px solid var(--line);
+            background: var(--panel-2);
+            color: var(--text);
+            padding: 10px 14px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        button:hover {
+            background: #273449;
+        }
+
+        main {
+            padding: 24px;
+        }
+
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .summary-card,
+        .viewer-card {
+            background: rgba(17, 24, 39, 0.9);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+        }
+
+        .summary-card {
+            padding: 16px;
+        }
+
+        .summary-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+        }
+
+        .summary-value {
+            margin-top: 6px;
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 18px;
+        }
+
+        .viewer-head {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .viewer-title {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .viewer-title strong {
+            font-size: 18px;
+        }
+
+        .viewer-title span {
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .status {
+            font-size: 12px;
+            font-weight: 700;
+            padding: 6px 10px;
+            border-radius: 999px;
+            border: 1px solid currentColor;
+            white-space: nowrap;
+        }
+
+        .status.ok { color: var(--ok); }
+        .status.warn { color: var(--warn); }
+        .status.bad { color: var(--bad); }
+        .status.loading { color: #60a5fa; }
+
+        .viewport {
+            height: 280px;
+            background: radial-gradient(circle at 50% 30%, #1e293b 0%, #0b1120 70%);
+            position: relative;
+        }
+
+        .viewport canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .details {
+            padding: 14px 16px 16px;
+        }
+
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .metric {
+            background: rgba(31, 41, 55, 0.75);
+            border: 1px solid #253042;
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        .metric-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 4px;
+        }
+
+        .metric-value {
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .issues {
+            margin: 0;
+            padding-left: 18px;
+        }
+
+        .issues li + li {
+            margin-top: 6px;
+        }
+
+        .footer-note {
+            margin-top: 24px;
+            padding: 16px;
+            background: rgba(17, 24, 39, 0.8);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+        }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <header>
+        <h1>GLB Debug Viewer</h1>
+        <p>Loads each exported character in isolation, frames it automatically, and reports suspicious export signals like missing skinned meshes, missing bones, invalid bounds, or missing animation clips.</p>
+        <div class="controls">
+            <button id="reload-btn" type="button">Reload all models</button>
+            <button id="toggle-axes-btn" type="button">Toggle axes helpers</button>
+            <button id="toggle-skeleton-btn" type="button">Toggle skeletons</button>
+            <button id="log-btn" type="button">Log diagnostics</button>
+        </div>
+    </header>
+
+    <main>
+        <section class="summary" id="summary"></section>
+        <section class="grid" id="grid"></section>
+        <section class="footer-note">
+            <strong>How to use this page</strong>
+            <ul>
+                <li>If a model loads here but not in the simulator, the export is probably fine and the scene logic is the issue.</li>
+                <li>If a model has zero skinned meshes or zero bones, the Blender export likely dropped the armature.</li>
+                <li>If the height is absurdly tiny or huge, transforms were probably not applied before export.</li>
+                <li>If the model is present but clipped or disappears when orbiting, stale bounds or frustum culling may be involved.</li>
+            </ul>
+        </section>
+    </main>
+
+    <script>
+        const ASSETS = [
+            { name: 'Ben', path: 'assets/ben.glb' },
+            { name: 'James', path: 'assets/james.glb' },
+            { name: 'Jody', path: 'assets/jody.glb' },
+            { name: 'Joe', path: 'assets/joe.glb' },
+            { name: 'Leonard', path: 'assets/leonard.glb' },
+            { name: 'Megan', path: 'assets/megan.glb' },
+            { name: 'Remy', path: 'assets/remy.glb' },
+            { name: 'Suzie', path: 'assets/suzie.glb' },
+            { name: 'Kate', path: 'assets/kate.glb' },
+            { name: 'Louise', path: 'assets/louise.glb' },
+            { name: 'Brian', path: 'assets/brian.glb' },
+        ];
+
+        const loader = new THREE.GLTFLoader();
+        const state = {
+            cards: [],
+            showAxes: false,
+            showSkeleton: false,
+        };
+
+        function classifyIssues(info) {
+            const issues = [];
+            if (info.loadError) issues.push(`Load error: ${info.loadError}`);
+            if (info.skinnedMeshes === 0) issues.push('No skinned meshes found. Armature export may be broken.');
+            if (info.bones === 0) issues.push('No bones found. Rig may be missing.');
+            if (info.animations === 0) issues.push('No embedded animation clip found.');
+            if (!Number.isFinite(info.height) || info.height <= 0) issues.push('Invalid bounding-box height.');
+            if (Number.isFinite(info.height) && info.height < 0.5) issues.push('Model is unusually small. Apply transforms in Blender before export.');
+            if (Number.isFinite(info.height) && info.height > 4.0) issues.push('Model is unusually large. Apply transforms in Blender before export.');
+            if (info.meshes === 0) issues.push('No renderable meshes found.');
+            return issues;
+        }
+
+        function statusClass(issues) {
+            if (!issues.length) return 'ok';
+            if (issues.some(issue => /Load error|No skinned meshes|No bones|No renderable meshes|Invalid bounding-box/.test(issue))) {
+                return 'bad';
+            }
+            return 'warn';
+        }
+
+        function formatNum(value) {
+            return Number.isFinite(value) ? value.toFixed(3) : '—';
+        }
+
+        function createSummary(results) {
+            const loaded = results.filter(r => !r.loadError).length;
+            const failed = results.filter(r => r.loadError).length;
+            const suspicious = results.filter(r => classifyIssues(r).length > 0).length;
+            const avgHeight = results.length
+                ? results.reduce((sum, r) => sum + (Number.isFinite(r.height) ? r.height : 0), 0) / results.length
+                : 0;
+
+            document.getElementById('summary').innerHTML = `
+                <div class="summary-card">
+                    <div class="summary-label">Models loaded</div>
+                    <div class="summary-value">${loaded}/${results.length}</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-label">Failed loads</div>
+                    <div class="summary-value">${failed}</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-label">Suspicious exports</div>
+                    <div class="summary-value">${suspicious}</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-label">Average height</div>
+                    <div class="summary-value">${formatNum(avgHeight)}m</div>
+                </div>
+            `;
+        }
+
+        function addLights(scene) {
+            scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+
+            const key = new THREE.DirectionalLight(0xfff1d6, 1.2);
+            key.position.set(3, 5, 4);
+            scene.add(key);
+
+            const fill = new THREE.DirectionalLight(0x9ec5ff, 0.45);
+            fill.position.set(-4, 3, -2);
+            scene.add(fill);
+        }
+
+        function addGround(scene) {
+            const floor = new THREE.Mesh(
+                new THREE.CircleGeometry(2.5, 48),
+                new THREE.MeshStandardMaterial({ color: 0x172033, roughness: 0.95, metalness: 0.05 })
+            );
+            floor.rotation.x = -Math.PI / 2;
+            scene.add(floor);
+        }
+
+        function inspectModel(root, animations) {
+            root.updateMatrixWorld(true);
+            const box = new THREE.Box3().setFromObject(root);
+            const size = new THREE.Vector3();
+            const center = new THREE.Vector3();
+            box.getSize(size);
+            box.getCenter(center);
+
+            let meshes = 0;
+            let skinnedMeshes = 0;
+            let bones = 0;
+            let materials = 0;
+            const materialNames = new Set();
+
+            root.traverse(node => {
+                if (node.isMesh) {
+                    meshes += 1;
+                    const mats = Array.isArray(node.material) ? node.material : [node.material];
+                    mats.filter(Boolean).forEach(mat => {
+                        materials += 1;
+                        if (mat.name) materialNames.add(mat.name);
+                    });
+                }
+                if (node.isSkinnedMesh) skinnedMeshes += 1;
+                if (node.isBone) bones += 1;
+                if (node.isSkinnedMesh) {
+                    node.frustumCulled = false;
+                    node.geometry?.computeBoundingBox?.();
+                    node.geometry?.computeBoundingSphere?.();
+                }
+            });
+
+            return {
+                meshes,
+                skinnedMeshes,
+                bones,
+                materials,
+                materialNames: [...materialNames],
+                animations: animations.length,
+                width: size.x,
+                height: size.y,
+                depth: size.z,
+                center,
+                box,
+            };
+        }
+
+        function frameCamera(camera, controls, info) {
+            const maxDim = Math.max(info.width || 1, info.height || 1, info.depth || 1);
+            const distance = Math.max(maxDim * 1.8, 1.8);
+            camera.position.set(info.center.x + distance * 0.35, info.center.y + Math.max(info.height * 0.45, 0.8), info.center.z + distance);
+            camera.near = 0.01;
+            camera.far = 100;
+            camera.updateProjectionMatrix();
+            controls.target.copy(info.center);
+            controls.update();
+        }
+
+        function createCard(asset) {
+            const card = document.createElement('article');
+            card.className = 'viewer-card';
+            card.innerHTML = `
+                <div class="viewer-head">
+                    <div class="viewer-title">
+                        <strong>${asset.name}</strong>
+                        <span>${asset.path}</span>
+                    </div>
+                    <span class="status loading">Loading</span>
+                </div>
+                <div class="viewport"></div>
+                <div class="details">
+                    <div class="metrics"></div>
+                    <ul class="issues"></ul>
+                </div>
+            `;
+
+            const viewport = card.querySelector('.viewport');
+            const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+            renderer.setSize(viewport.clientWidth || 320, viewport.clientHeight || 280, false);
+            renderer.outputEncoding = THREE.sRGBEncoding;
+            viewport.appendChild(renderer.domElement);
+
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(45, (viewport.clientWidth || 320) / (viewport.clientHeight || 280), 0.01, 100);
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.target.set(0, 1, 0);
+            addLights(scene);
+            addGround(scene);
+
+            const axesHelper = new THREE.AxesHelper(1.5);
+            axesHelper.visible = state.showAxes;
+            scene.add(axesHelper);
+
+            const ctx = { asset, card, renderer, scene, camera, controls, axesHelper, skeletonHelper: null, mixer: null, info: null };
+            state.cards.push(ctx);
+            return ctx;
+        }
+
+        function resizeCard(ctx) {
+            const width = ctx.card.querySelector('.viewport').clientWidth || 320;
+            const height = ctx.card.querySelector('.viewport').clientHeight || 280;
+            ctx.renderer.setSize(width, height, false);
+            ctx.camera.aspect = width / height;
+            ctx.camera.updateProjectionMatrix();
+        }
+
+        function renderCard(ctx, timeMs) {
+            if (ctx.mixer && ctx._lastTimeMs != null) {
+                ctx.mixer.update((timeMs - ctx._lastTimeMs) / 1000);
+            }
+            ctx._lastTimeMs = timeMs;
+            ctx.controls.update();
+            ctx.renderer.render(ctx.scene, ctx.camera);
+        }
+
+        function updateCardUI(ctx, info) {
+            const issues = classifyIssues(info);
+            const status = ctx.card.querySelector('.status');
+            status.className = `status ${statusClass(issues)}`;
+            status.textContent = issues.length ? `${issues.length} issue${issues.length > 1 ? 's' : ''}` : 'Healthy';
+
+            const metrics = ctx.card.querySelector('.metrics');
+            metrics.innerHTML = `
+                <div class="metric"><div class="metric-label">Meshes</div><div class="metric-value">${info.meshes}</div></div>
+                <div class="metric"><div class="metric-label">Skinned</div><div class="metric-value">${info.skinnedMeshes}</div></div>
+                <div class="metric"><div class="metric-label">Bones</div><div class="metric-value">${info.bones}</div></div>
+                <div class="metric"><div class="metric-label">Animations</div><div class="metric-value">${info.animations}</div></div>
+                <div class="metric"><div class="metric-label">Height</div><div class="metric-value">${formatNum(info.height)}m</div></div>
+                <div class="metric"><div class="metric-label">Width</div><div class="metric-value">${formatNum(info.width)}m</div></div>
+            `;
+
+            const issuesEl = ctx.card.querySelector('.issues');
+            issuesEl.innerHTML = issues.length
+                ? issues.map(issue => `<li>${issue}</li>`).join('')
+                : '<li>No obvious export problems detected.</li>';
+        }
+
+        async function loadAsset(ctx) {
+            const status = ctx.card.querySelector('.status');
+            status.className = 'status loading';
+            status.textContent = 'Loading';
+
+            try {
+                const gltf = await loader.loadAsync(ctx.asset.path);
+                const root = gltf.scene;
+                root.traverse(node => {
+                    if (node.isMesh) {
+                        node.castShadow = true;
+                        node.receiveShadow = true;
+                    }
+                });
+                ctx.scene.add(root);
+
+                const info = inspectModel(root, gltf.animations || []);
+                ctx.info = { ...info, name: ctx.asset.name, path: ctx.asset.path, loadError: null };
+
+                if (gltf.animations && gltf.animations[0]) {
+                    ctx.mixer = new THREE.AnimationMixer(root);
+                    const action = ctx.mixer.clipAction(gltf.animations[0]);
+                    action.play();
+                }
+
+                if (ctx.skeletonHelper) {
+                    ctx.scene.remove(ctx.skeletonHelper);
+                    ctx.skeletonHelper = null;
+                }
+                ctx.skeletonHelper = new THREE.SkeletonHelper(root);
+                ctx.skeletonHelper.visible = state.showSkeleton;
+                ctx.scene.add(ctx.skeletonHelper);
+
+                frameCamera(ctx.camera, ctx.controls, info);
+                updateCardUI(ctx, ctx.info);
+                return ctx.info;
+            } catch (error) {
+                const info = {
+                    name: ctx.asset.name,
+                    path: ctx.asset.path,
+                    meshes: 0,
+                    skinnedMeshes: 0,
+                    bones: 0,
+                    materials: 0,
+                    animations: 0,
+                    width: NaN,
+                    height: NaN,
+                    depth: NaN,
+                    loadError: error.message || String(error),
+                };
+                ctx.info = info;
+                updateCardUI(ctx, info);
+                return info;
+            }
+        }
+
+        async function build() {
+            state.cards.forEach(ctx => ctx.renderer.dispose());
+            state.cards = [];
+            const grid = document.getElementById('grid');
+            grid.innerHTML = '';
+
+            const cards = ASSETS.map(asset => {
+                const ctx = createCard(asset);
+                grid.appendChild(ctx.card);
+                return ctx;
+            });
+
+            const results = [];
+            for (const ctx of cards) {
+                results.push(await loadAsset(ctx));
+            }
+            createSummary(results);
+        }
+
+        function animate(timeMs) {
+            requestAnimationFrame(animate);
+            state.cards.forEach(ctx => renderCard(ctx, timeMs));
+        }
+
+        document.getElementById('reload-btn').addEventListener('click', () => build());
+        document.getElementById('toggle-axes-btn').addEventListener('click', () => {
+            state.showAxes = !state.showAxes;
+            state.cards.forEach(ctx => {
+                ctx.axesHelper.visible = state.showAxes;
+            });
+        });
+        document.getElementById('toggle-skeleton-btn').addEventListener('click', () => {
+            state.showSkeleton = !state.showSkeleton;
+            state.cards.forEach(ctx => {
+                if (ctx.skeletonHelper) ctx.skeletonHelper.visible = state.showSkeleton;
+            });
+        });
+        document.getElementById('log-btn').addEventListener('click', () => {
+            console.table(state.cards.map(ctx => ({
+                name: ctx.info?.name,
+                path: ctx.info?.path,
+                meshes: ctx.info?.meshes,
+                skinnedMeshes: ctx.info?.skinnedMeshes,
+                bones: ctx.info?.bones,
+                animations: ctx.info?.animations,
+                height: ctx.info?.height,
+                width: ctx.info?.width,
+                depth: ctx.info?.depth,
+                loadError: ctx.info?.loadError || '',
+                issues: ctx.info ? classifyIssues(ctx.info).join(' | ') : ''
+            })));
+        });
+
+        window.addEventListener('resize', () => state.cards.forEach(resizeCard));
+
+        build();
+        animate(0);
+    </script>
+</body>
+</html>

@@ -15,6 +15,10 @@ class WealthExchange:
     '''
 
     def execute(self, agent):
+        # Clear previous step's exchange record
+        agent.last_paid_uids = []
+        agent.last_paid_amounts = []
+
         # Get paid - Base injector of wealth into the economy
         agent.wealth += (agent.W*agent.wealth)
         
@@ -27,6 +31,8 @@ class WealthExchange:
         if agent.wealth > agent.model.survival_cost and agent is not survival_agent: 
             agent.wealth -= agent.model.survival_cost
             survival_agent.wealth += agent.model.survival_cost
+            agent.last_paid_uids.append(survival_agent.unique_id)
+            agent.last_paid_amounts.append(agent.model.survival_cost)
         else: 
             agent.wealth -= agent.wealth
             survival_agent.wealth += agent.wealth
@@ -40,8 +46,11 @@ class WealthExchange:
         """
         thrive_agent = agent.model.random.choice(agent.model.agents)
         if agent.wealth > (thrive_agent.W*agent.wealth) and thrive_agent is not agent: 
-            thrive_agent.wealth += (thrive_agent.W*agent.wealth)
-            agent.wealth -= (thrive_agent.W*agent.wealth)
+            amount = thrive_agent.W * agent.wealth
+            thrive_agent.wealth += amount
+            agent.wealth -= amount
+            agent.last_paid_uids.append(thrive_agent.unique_id)
+            agent.last_paid_amounts.append(amount)
 
 
 # Called by Agent
